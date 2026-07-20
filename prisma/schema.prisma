@@ -1,0 +1,78 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model Category {
+  id        Int        @id @default(autoincrement())
+  name      String     @unique
+  icon      String?
+  sortOrder Int        @default(0)
+  createdAt DateTime   @default(now())
+  items     MenuItem[]
+}
+
+model MenuItem {
+  id           Int         @id @default(autoincrement())
+  name         String
+  price        Float
+  image        String?
+  available    Boolean     @default(true)
+  categoryId   Int
+  category     Category    @relation(fields: [categoryId], references: [id])
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+  orderItems   OrderItem[]
+}
+
+model RestaurantTable {
+  id        Int      @id @default(autoincrement())
+  number    Int      @unique
+  seats     Int      @default(4)
+  status    String   @default("available")
+  createdAt DateTime @default(now())
+  orders    Order[]
+}
+
+model Order {
+  id           Int              @id @default(autoincrement())
+  orderNumber  String           @unique
+  type         String
+  status       String           @default("pending")
+  tableId      Int?
+  table        RestaurantTable? @relation(fields: [tableId], references: [id])
+  subtotal     Float
+  total        Float
+  cashReceived Float?
+  change       Float?
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+  items        OrderItem[]
+}
+
+model OrderItem {
+  id         Int      @id @default(autoincrement())
+  orderId    Int
+  order      Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  menuItemId Int
+  menuItem   MenuItem @relation(fields: [menuItemId], references: [id])
+  name       String
+  price      Float
+  quantity   Int
+  subtotal   Float
+  createdAt  DateTime @default(now())
+}
+
+model User {
+  id        Int      @id @default(autoincrement())
+  name      String
+  email     String   @unique
+  password  String
+  role      String   @default("cashier")
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
