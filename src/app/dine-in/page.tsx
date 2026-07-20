@@ -213,7 +213,7 @@ export default function DineInPage() {
           <div className="flex-1 flex flex-col overflow-hidden">
             <MenuGrid />
           </div>
-          <div className="w-72 xl:w-80 flex-shrink-0">
+          <div className="w-72 xl:w-80 shrink-0">
             <OrderPanel
               onOrderComplete={handleOrderComplete}
               orderTakerId={selectedOrderTaker}

@@ -215,7 +215,7 @@ export default function DeliveryPage() {
           <div className="flex-1 flex flex-col overflow-hidden">
             <MenuGrid />
           </div>
-          <div className="w-80 xl:w-96 flex-shrink-0 overflow-y-auto" style={{ background: "var(--bg-card)", borderLeft: "1px solid var(--border-color)" }}>
+          <div className="w-80 xl:w-96 shrink-0 overflow-y-auto" style={{ background: "var(--bg-card)", borderLeft: "1px solid var(--border-color)" }}>
             {/* Customer info section */}
             <div style={{ padding: "14px", borderBottom: "1px solid var(--border-color)" }}>
               <h3 style={{ color: "var(--text-primary)", fontSize: "14px", fontWeight: 700, marginBottom: "10px" }}>Customer Info</h3>
