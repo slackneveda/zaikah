@@ -6,6 +6,7 @@ export async function GET() {
     const categories = await prisma.category.findMany({
       orderBy: { sortOrder: "asc" },
       include: {
+        department: true,
         items: {
           where: { available: true },
           orderBy: { name: "asc" },
@@ -22,12 +23,17 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { name, icon, sortOrder } = body;
+    const { name, icon, sortOrder, departmentId } = body;
     if (!name) {
       return NextResponse.json({ error: "Name is required" }, { status: 400 });
     }
     const category = await prisma.category.create({
-      data: { name, icon, sortOrder: sortOrder ?? 0 },
+      data: {
+        name,
+        icon,
+        sortOrder: sortOrder ?? 0,
+        departmentId: departmentId ? parseInt(departmentId) : null,
+      },
     });
     return NextResponse.json(category, { status: 201 });
   } catch (error) {

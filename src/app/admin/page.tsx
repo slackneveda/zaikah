@@ -7,18 +7,28 @@ import AdminStaffManagement from "./components/AdminStaffManagement";
 import AdminTableManagement from "./components/AdminTableManagement";
 import AdminOrderManagement from "./components/AdminOrderManagement";
 import AdminSalesReports from "./components/AdminSalesReports";
+import AdminDepartmentManagement from "./components/AdminDepartmentManagement";
+import AdminOrderTakerManagement from "./components/AdminOrderTakerManagement";
+import AdminRiderManagement from "./components/AdminRiderManagement";
+import AdminCustomerManagement from "./components/AdminCustomerManagement";
+import AdminSystemConfig from "./components/AdminSystemConfig";
 import MenuManagement from "../manager/components/MenuManagement";
 import AdminLoginGate from "./components/AdminLoginGate";
 
-type Tab = "overview" | "staff" | "menu" | "tables" | "orders" | "reports";
+type Tab = "overview" | "staff" | "menu" | "tables" | "orders" | "reports" | "departments" | "order-takers" | "riders" | "customers" | "system";
 
 const tabs: { id: Tab; label: string; icon: string; description: string }[] = [
   { id: "overview", label: "Dashboard", icon: "📊", description: "Full business overview" },
   { id: "staff", label: "Staff", icon: "👥", description: "Manage users & roles" },
   { id: "menu", label: "Menu", icon: "🍽️", description: "Categories & items" },
   { id: "tables", label: "Tables", icon: "🪑", description: "Table layout & status" },
+  { id: "departments", label: "Departments", icon: "🏢", description: "Kitchen departments & printers" },
+  { id: "order-takers", label: "Order Takers", icon: "📝", description: "Manage order takers" },
+  { id: "riders", label: "Riders", icon: "🛵", description: "Manage delivery riders" },
+  { id: "customers", label: "Customers", icon: "👤", description: "Customer database" },
   { id: "orders", label: "Orders", icon: "📋", description: "View & manage all orders" },
   { id: "reports", label: "Reports", icon: "📈", description: "Sales analytics & export" },
+  { id: "system", label: "System", icon: "⚙️", description: "Passwords & system config" },
 ];
 
 export default function AdminPage() {
@@ -83,8 +93,13 @@ export default function AdminPage() {
             {activeTab === "staff" && <AdminStaffManagement />}
             {activeTab === "menu" && <MenuManagement />}
             {activeTab === "tables" && <AdminTableManagement />}
+            {activeTab === "departments" && <AdminDepartmentManagement />}
+            {activeTab === "order-takers" && <AdminOrderTakerManagement />}
+            {activeTab === "riders" && <AdminRiderManagement />}
+            {activeTab === "customers" && <AdminCustomerManagement />}
             {activeTab === "orders" && <AdminOrderManagement />}
             {activeTab === "reports" && <AdminSalesReports />}
+            {activeTab === "system" && <AdminSystemConfig />}
           </div>
         </div>
       )}

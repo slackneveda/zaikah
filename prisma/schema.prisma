@@ -6,13 +6,36 @@ datasource db {
   provider = "sqlite"
 }
 
+model SystemConfig {
+  id        Int      @id @default(autoincrement())
+  key       String   @unique
+  value     String
+  updatedAt DateTime @updatedAt
+}
+
 model Category {
-  id        Int        @id @default(autoincrement())
-  name      String     @unique
-  icon      String?
-  sortOrder Int        @default(0)
-  createdAt DateTime   @default(now())
-  items     MenuItem[]
+  id           Int          @id @default(autoincrement())
+  name         String       @unique
+  icon         String?
+  sortOrder    Int          @default(0)
+  departmentId Int?
+  department   Department?  @relation(fields: [departmentId], references: [id])
+  createdAt    DateTime     @default(now())
+  items        MenuItem[]
+}
+
+model Department {
+  id           Int          @id @default(autoincrement())
+  name         String       @unique
+  color        String       @default("#6B7599")
+  printerName  String?
+  printerAddress String?
+  printerType  String?
+  active       Boolean      @default(true)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+  categories   Category[]
+  orderItems   OrderItem[]
 }
 
 model MenuItem {
@@ -29,41 +52,100 @@ model MenuItem {
 }
 
 model RestaurantTable {
+  id          Int      @id @default(autoincrement())
+  name        String   @unique
+  tableType   String   @default("dining")
+  seats       Int      @default(4)
+  status      String   @default("available")
+  activeOrderId Int?
+  createdAt   DateTime @default(now())
+  orders      Order[]
+}
+
+model Customer {
+  id          Int      @id @default(autoincrement())
+  name        String
+  phone       String   @unique
+  address     String?
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  orders      Order[]
+}
+
+model OrderTaker {
   id        Int      @id @default(autoincrement())
-  number    Int      @unique
-  seats     Int      @default(4)
-  status    String   @default("available")
+  name      String
+  phone     String?
+  active    Boolean  @default(true)
   createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  orders    Order[]
+}
+
+model Rider {
+  id        Int      @id @default(autoincrement())
+  name      String
+  phone     String?
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
   orders    Order[]
 }
 
 model Order {
-  id           Int              @id @default(autoincrement())
-  orderNumber  String           @unique
-  type         String
-  status       String           @default("pending")
-  tableId      Int?
-  table        RestaurantTable? @relation(fields: [tableId], references: [id])
-  subtotal     Float
-  total        Float
-  cashReceived Float?
-  change       Float?
-  createdAt    DateTime         @default(now())
-  updatedAt    DateTime         @updatedAt
-  items        OrderItem[]
+  id             Int              @id @default(autoincrement())
+  orderNumber    String           @unique
+  type           String
+  status         String           @default("pending")
+  tableId        Int?
+  table          RestaurantTable? @relation(fields: [tableId], references: [id])
+  customerId     Int?
+  customer       Customer?        @relation(fields: [customerId], references: [id])
+  orderTakerId   Int?
+  orderTaker     OrderTaker?      @relation(fields: [orderTakerId], references: [id])
+  riderId        Int?
+  rider          Rider?           @relation(fields: [riderId], references: [id])
+  customerName   String?
+  customerPhone  String?
+  customerAddress String?
+  notes          String?
+  subtotal       Float
+  discount       Float            @default(0)
+  tax            Float            @default(0)
+  total          Float
+  cashReceived   Float?
+  change         Float?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  items          OrderItem[]
+  tableTransfers TableTransfer[] @relation("TransferFrom")
 }
 
 model OrderItem {
-  id         Int      @id @default(autoincrement())
-  orderId    Int
-  order      Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  menuItemId Int
-  menuItem   MenuItem @relation(fields: [menuItemId], references: [id])
-  name       String
-  price      Float
-  quantity   Int
-  subtotal   Float
-  createdAt  DateTime @default(now())
+  id           Int        @id @default(autoincrement())
+  orderId      Int
+  order        Order      @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  menuItemId   Int
+  menuItem     MenuItem   @relation(fields: [menuItemId], references: [id])
+  departmentId Int?
+  department   Department? @relation(fields: [departmentId], references: [id])
+  name         String
+  price        Float
+  quantity     Int
+  notes        String?
+  subtotal     Float
+  createdAt    DateTime   @default(now())
+}
+
+model TableTransfer {
+  id            Int      @id @default(autoincrement())
+  orderId       Int
+  order         Order    @relation("TransferFrom", fields: [orderId], references: [id])
+  fromTableId   Int
+  toTableId     Int
+  transferredAt DateTime @default(now())
+  transferredBy String?
 }
 
 model User {

@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { PrismaClient } from "@prisma/client";
 import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
 import * as bcrypt from "bcryptjs";
@@ -115,28 +116,69 @@ async function main() {
     await prisma.menuItem.create({ data: item });
   }
 
-  // Tables
-  for (let i = 1; i <= 12; i++) {
+  // Dining Tables G1-G20
+  for (let i = 1; i <= 20; i++) {
     await prisma.restaurantTable.upsert({
-      where: { number: i },
+      where: { name: `G${i}` },
       update: {},
-      create: { number: i, seats: i <= 6 ? 4 : 6 },
+      create: { name: `G${i}`, tableType: "dining", seats: i <= 10 ? 4 : 6 },
+    });
+  }
+  // Takeaway slots T1-T10
+  for (let i = 1; i <= 10; i++) {
+    await prisma.restaurantTable.upsert({
+      where: { name: `T${i}` },
+      update: {},
+      create: { name: `T${i}`, tableType: "takeaway", seats: 2 },
     });
   }
 
-  // Admin user
-  const hashedPassword = bcrypt.hashSync("admin123", 10);
+  // Departments
+  const departments = [
+    { name: "Kitchen", color: "#ef4444" },
+    { name: "Bar", color: "#3b82f6" },
+    { name: "Dessert", color: "#ec4899" },
+    { name: "Drinks", color: "#22c55e" },
+    { name: "BBQ", color: "#f97316" },
+  ];
+  for (const dept of departments) {
+    await prisma.department.upsert({
+      where: { name: dept.name },
+      update: {},
+      create: dept,
+    });
+  }
+
+  // System config - master password and role passwords
+  const masterPassword = bcrypt.hashSync("master123", 10);
+  const configs = [
+    { key: "master_password", value: masterPassword },
+    { key: "master_password_enabled", value: "true" },
+    { key: "role_password_admin", value: bcrypt.hashSync("admin123", 10) },
+    { key: "role_password_manager", value: bcrypt.hashSync("manager123", 10) },
+    { key: "role_password_dining", value: bcrypt.hashSync("dining123", 10) },
+    { key: "role_password_takeaway", value: bcrypt.hashSync("takeaway123", 10) },
+    { key: "role_password_delivery", value: bcrypt.hashSync("delivery123", 10) },
+  ];
+  for (const cfg of configs) {
+    await (prisma.systemConfig as any).upsert({
+      where: { key: cfg.key },
+      update: { value: cfg.value },
+      create: cfg,
+    });
+  }
+
+  // Users
   await prisma.user.upsert({
     where: { email: "admin@zaikah.com" },
     update: {},
     create: {
       name: "Admin",
       email: "admin@zaikah.com",
-      password: hashedPassword,
+      password: bcrypt.hashSync("admin123", 10),
       role: "admin",
     },
   });
-
   await prisma.user.upsert({
     where: { email: "manager@zaikah.com" },
     update: {},
@@ -147,6 +189,54 @@ async function main() {
       role: "manager",
     },
   });
+  await prisma.user.upsert({
+    where: { email: "dining@zaikah.com" },
+    update: {},
+    create: {
+      name: "Dining Staff",
+      email: "dining@zaikah.com",
+      password: bcrypt.hashSync("dining123", 10),
+      role: "dining",
+    },
+  });
+  await prisma.user.upsert({
+    where: { email: "takeaway@zaikah.com" },
+    update: {},
+    create: {
+      name: "Takeaway Staff",
+      email: "takeaway@zaikah.com",
+      password: bcrypt.hashSync("takeaway123", 10),
+      role: "takeaway",
+    },
+  });
+  await prisma.user.upsert({
+    where: { email: "delivery@zaikah.com" },
+    update: {},
+    create: {
+      name: "Delivery Staff",
+      email: "delivery@zaikah.com",
+      password: bcrypt.hashSync("delivery123", 10),
+      role: "delivery",
+    },
+  });
+
+  // Sample order takers
+  const orderTakers = ["Ali Khan", "Sara Ahmed", "Hassan Raza"];
+  for (const name of orderTakers) {
+    const existing = await (prisma.orderTaker as any).findFirst({ where: { name } });
+    if (!existing) {
+      await (prisma.orderTaker as any).create({ data: { name } });
+    }
+  }
+
+  // Sample riders
+  const riders = ["Usman Rider", "Bilal Express", "Tariq Swift"];
+  for (const name of riders) {
+    const existing = await (prisma.rider as any).findFirst({ where: { name } });
+    if (!existing) {
+      await (prisma.rider as any).create({ data: { name } });
+    }
+  }
 
   console.log("Seed complete!");
 }

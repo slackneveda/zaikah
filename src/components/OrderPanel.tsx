@@ -1,137 +1,167 @@
 "use client";
 
 import { useOrderStore } from "@/store/orderStore";
-import { useState, useRef } from "react";
+import { useState, useCallback } from "react";
 import PrintReceipt from "./PrintReceipt";
 
 interface OrderPanelProps {
   onOrderComplete?: (orderId: number, orderNumber: string) => void;
+  orderTakerId?: number | null;
+  existingOrderId?: number;
+  customerId?: number | null;
+  riderId?: number | null;
+  customerPhone?: string;
+  customerName?: string;
+  customerAddress?: string;
+  deliveryNotes?: string;
 }
 
-export default function OrderPanel({ onOrderComplete }: OrderPanelProps) {
+export default function OrderPanel({
+  onOrderComplete,
+  orderTakerId,
+  existingOrderId,
+  customerId,
+  riderId,
+  customerPhone,
+  customerName,
+  customerAddress,
+  deliveryNotes,
+}: OrderPanelProps) {
   const {
     items,
     orderType,
-    tableNumber,
+    tableName,
     tableId,
     cashReceived,
+    discount,
+    notes,
     updateQuantity,
     removeItem,
     clearCart,
     setCashReceived,
+    setDiscount,
+    setNotes,
     getSubtotal,
+    getTotal,
     getChange,
   } = useOrderStore();
 
   const [loading, setLoading] = useState(false);
-  const [completedOrder, setCompletedOrder] = useState<{
-    id: number;
-    orderNumber: string;
-  } | null>(null);
+  const [completedOrder, setCompletedOrder] = useState<{ id: number; orderNumber: string } | null>(null);
   const [cashInput, setCashInput] = useState("");
-  const printRef = useRef<HTMLDivElement>(null);
+  const [discountInput, setDiscountInput] = useState("");
+  const [showNotes, setShowNotes] = useState(false);
 
   const subtotal = getSubtotal();
+  const total = getTotal();
   const change = getChange();
 
-  const handleCashInput = (val: string) => {
+  const handleCashInput = useCallback((val: string) => {
     setCashInput(val);
     const num = parseFloat(val);
-    if (!isNaN(num)) setCashReceived(num);
-    else setCashReceived(0);
-  };
+    setCashReceived(isNaN(num) ? 0 : num);
+  }, [setCashReceived]);
 
-  const handleComplete = async () => {
-    if (items.length === 0) return;
+  const handleDiscountInput = useCallback((val: string) => {
+    setDiscountInput(val);
+    const num = parseFloat(val);
+    setDiscount(isNaN(num) ? 0 : num);
+  }, [setDiscount]);
+
+  const handleComplete = useCallback(async () => {
+    if (items.length === 0 || loading) return;
     setLoading(true);
     try {
-      const res = await fetch("/api/orders", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          type: orderType,
-          tableId: tableId,
-          items: items.map((i) => ({
-            menuItemId: i.id,
-            name: i.name,
-            price: i.price,
-            quantity: i.quantity,
-          })),
-          cashReceived: cashReceived || subtotal,
-        }),
-      });
-      if (!res.ok) throw new Error("Order failed");
+      const payload: Record<string, unknown> = {
+        type: orderType,
+        tableId,
+        items: items.map((i) => ({
+          menuItemId: i.id,
+          name: i.name,
+          price: i.price,
+          quantity: i.quantity,
+          notes: i.notes,
+          departmentId: i.departmentId,
+        })),
+        cashReceived: cashReceived || total,
+        discount,
+        orderTakerId: orderTakerId || null,
+        customerId: customerId || null,
+        riderId: riderId || null,
+        customerPhone: customerPhone || null,
+        customerName: customerName || null,
+        customerAddress: customerAddress || null,
+        notes: notes || deliveryNotes || null,
+        // Delivery orders start as pending for tracking; others complete immediately
+        status: orderType === "delivery" ? "pending" : "completed",
+      };
+
+      let res: Response;
+      if (existingOrderId) {
+        // Update existing order
+        res = await fetch(`/api/orders/${existingOrderId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...payload, items }),
+        });
+      } else {
+        res = await fetch("/api/orders", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+      }
+
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || "Order failed");
+      }
       const order = await res.json();
       setCompletedOrder({ id: order.id, orderNumber: order.orderNumber });
       onOrderComplete?.(order.id, order.orderNumber);
     } catch (err) {
       console.error(err);
-      alert("Failed to complete order. Please try again.");
+      alert(err instanceof Error ? err.message : "Failed to complete order");
     } finally {
       setLoading(false);
     }
-  };
+  }, [items, loading, orderType, tableId, cashReceived, total, discount, orderTakerId, customerId, riderId, customerPhone, customerName, customerAddress, notes, deliveryNotes, existingOrderId, onOrderComplete]);
 
-  const handlePrint = () => {
-    window.print();
-  };
-
-  const handleNewOrder = () => {
+  const handleNewOrder = useCallback(() => {
     clearCart();
     setCompletedOrder(null);
     setCashInput("");
-  };
+    setDiscountInput("");
+  }, [clearCart]);
 
   if (completedOrder) {
     return (
-      <div
-        style={{ background: "var(--bg-card)", borderLeft: "1px solid var(--border-color)" }}
-        className="flex flex-col h-full"
-      >
-        {/* Scrollable receipt + buttons */}
+      <div style={{ background: "var(--bg-card)", borderLeft: "1px solid var(--border-color)" }} className="flex flex-col h-full">
         <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", alignItems: "center", padding: "16px 12px", gap: "12px" }}>
-
-          {/* Success badge */}
           <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "6px" }}>
             <div style={{ width: "48px", height: "48px", borderRadius: "50%", background: "rgba(34,197,94,0.15)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "22px" }}>✓</div>
             <p style={{ color: "var(--success)", fontWeight: 700, fontSize: "16px", margin: 0 }}>Order Complete!</p>
           </div>
-
-          {/* Receipt preview — visible on screen AND used for print */}
-          <div
-            id="print-receipt"
-            ref={printRef}
-            style={{
-              background: "#fff",
-              color: "#000",
-              borderRadius: "8px",
-              boxShadow: "0 2px 16px rgba(0,0,0,0.25)",
-              width: "100%",
-              maxWidth: "300px",
-            }}
-          >
+          <div id="print-receipt" style={{ background: "#fff", color: "#000", borderRadius: "8px", boxShadow: "0 2px 16px rgba(0,0,0,0.25)", width: "100%", maxWidth: "300px" }}>
             <PrintReceipt
               orderNumber={completedOrder.orderNumber}
               items={items}
               subtotal={subtotal}
-              cashReceived={cashReceived || subtotal}
+              discount={discount}
+              total={total}
+              cashReceived={cashReceived || total}
               change={change}
               orderType={orderType}
-              tableNumber={tableNumber}
+              tableName={tableName}
+              customerName={customerName}
+              customerPhone={customerPhone}
+              customerAddress={customerAddress}
             />
           </div>
-
-          {/* Action buttons */}
-          <button
-            onClick={handlePrint}
-            style={{ background: "var(--accent-maroon)", color: "var(--text-primary)", border: "none", borderRadius: "8px", padding: "11px 0", fontWeight: 600, fontSize: "14px", cursor: "pointer", width: "100%", maxWidth: "300px" }}
-          >
+          <button onClick={() => window.print()} style={{ background: "var(--accent-maroon)", color: "var(--text-primary)", border: "none", borderRadius: "8px", padding: "11px 0", fontWeight: 600, fontSize: "14px", cursor: "pointer", width: "100%", maxWidth: "300px" }}>
             🖨️ Print Receipt
           </button>
-          <button
-            onClick={handleNewOrder}
-            style={{ background: "var(--bg-secondary)", color: "var(--text-primary)", border: "1px solid var(--border-color)", borderRadius: "8px", padding: "11px 0", fontWeight: 600, fontSize: "14px", cursor: "pointer", width: "100%", maxWidth: "300px" }}
-          >
+          <button onClick={handleNewOrder} style={{ background: "var(--bg-secondary)", color: "var(--text-primary)", border: "1px solid var(--border-color)", borderRadius: "8px", padding: "11px 0", fontWeight: 600, fontSize: "14px", cursor: "pointer", width: "100%", maxWidth: "300px" }}>
             New Order
           </button>
         </div>
@@ -140,186 +170,129 @@ export default function OrderPanel({ onOrderComplete }: OrderPanelProps) {
   }
 
   return (
-    <div
-      style={{ background: "var(--bg-card)", borderLeft: "1px solid var(--border-color)" }}
-      className="flex flex-col h-full"
-    >
+    <div style={{ background: "var(--bg-card)", borderLeft: "1px solid var(--border-color)" }} className="flex flex-col h-full">
       {/* Header */}
-      <div
-        style={{ borderBottom: "1px solid var(--border-color)" }}
-        className="px-4 py-3"
-      >
-        <div className="flex items-center justify-between">
-          <h2 style={{ color: "var(--text-primary)" }} className="font-bold text-lg">
-            Current Order
-          </h2>
-          {orderType === "dine-in" && tableNumber && (
-            <span
-              style={{ background: "rgba(122,31,43,0.2)", color: "var(--accent-maroon-light)", border: "1px solid var(--accent-maroon)" }}
-              className="text-xs px-2 py-1 rounded-full font-semibold"
-            >
-              Table {tableNumber}
+      <div style={{ borderBottom: "1px solid var(--border-color)", padding: "12px 16px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <h2 style={{ color: "var(--text-primary)", fontWeight: 700, fontSize: "16px", margin: 0 }}>
+          {existingOrderId ? "Update Order" : "Current Order"}
+        </h2>
+        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+          {orderType === "dine-in" && tableName && (
+            <span style={{ background: "rgba(122,31,43,0.2)", color: "var(--accent-maroon-light)", border: "1px solid var(--accent-maroon)", borderRadius: "20px", padding: "2px 8px", fontSize: "11px", fontWeight: 700 }}>
+              {tableName}
             </span>
           )}
           {items.length > 0 && (
-            <button
-              onClick={clearCart}
-              style={{ color: "var(--danger)" }}
-              className="text-xs hover:opacity-80"
-            >
+            <button onClick={clearCart} style={{ color: "var(--danger)", fontSize: "11px", background: "none", border: "none", cursor: "pointer" }}>
               Clear All
             </button>
           )}
         </div>
       </div>
 
-      {/* Items */}
-      <div className="flex-1 overflow-y-auto p-3 space-y-2">
+      {/* Items list */}
+      <div style={{ flex: 1, overflowY: "auto", padding: "10px" }}>
         {items.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full gap-2">
-            <span className="text-4xl opacity-20">🛒</span>
-            <p style={{ color: "var(--text-muted)" }} className="text-sm">
-              No items added
-            </p>
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", gap: "8px" }}>
+            <span style={{ fontSize: "36px", opacity: 0.2 }}>🛒</span>
+            <p style={{ color: "var(--text-muted)", fontSize: "13px", margin: 0 }}>No items added</p>
           </div>
         ) : (
-          items.map((item) => (
-            <div
-              key={item.id}
-              style={{ background: "var(--bg-secondary)", border: "1px solid var(--border-color)" }}
-              className="rounded-lg p-3"
-            >
-              <div className="flex justify-between items-start mb-2">
-                <p style={{ color: "var(--text-primary)" }} className="text-sm font-medium leading-tight">
-                  {item.name}
-                </p>
-                <button
-                  onClick={() => removeItem(item.id)}
-                  style={{ color: "var(--text-muted)" }}
-                  className="hover:text-red-400 transition-colors text-xs ml-2"
-                >
-                  ✕
-                </button>
-              </div>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => updateQuantity(item.id, -1)}
-                    style={{
-                      background: "var(--bg-card)",
-                      border: "1px solid var(--border-color)",
-                      color: "var(--text-primary)",
-                    }}
-                    className="w-7 h-7 rounded-full text-sm flex items-center justify-center hover:opacity-80"
-                  >
-                    −
-                  </button>
-                  <span style={{ color: "var(--text-primary)" }} className="text-sm font-bold w-5 text-center">
-                    {item.quantity}
-                  </span>
-                  <button
-                    onClick={() => updateQuantity(item.id, 1)}
-                    style={{
-                      background: "var(--accent-maroon)",
-                      color: "var(--text-primary)",
-                    }}
-                    className="w-7 h-7 rounded-full text-sm flex items-center justify-center hover:opacity-80"
-                  >
-                    +
-                  </button>
+          <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+            {items.map((item) => (
+              <div key={item.id} style={{ background: "var(--bg-secondary)", border: "1px solid var(--border-color)", borderRadius: "10px", padding: "10px 12px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "8px" }}>
+                  <p style={{ color: "var(--text-primary)", fontSize: "13px", fontWeight: 500, margin: 0, flex: 1, lineHeight: "1.4" }}>{item.name}</p>
+                  <button onClick={() => removeItem(item.id)} style={{ color: "var(--text-muted)", background: "none", border: "none", cursor: "pointer", fontSize: "14px", marginLeft: "8px", lineHeight: 1 }}>✕</button>
                 </div>
-                <span style={{ color: "var(--accent-gold)" }} className="text-sm font-bold">
-                  Rs. {(item.price * item.quantity).toFixed(0)}
-                </span>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                    <button onClick={() => updateQuantity(item.id, -1)} style={{ width: "26px", height: "26px", borderRadius: "50%", background: "var(--bg-card)", border: "1px solid var(--border-color)", color: "var(--text-primary)", cursor: "pointer", fontSize: "14px", display: "flex", alignItems: "center", justifyContent: "center" }}>−</button>
+                    <span style={{ color: "var(--text-primary)", fontSize: "13px", fontWeight: 700, minWidth: "20px", textAlign: "center" }}>{item.quantity}</span>
+                    <button onClick={() => updateQuantity(item.id, 1)} style={{ width: "26px", height: "26px", borderRadius: "50%", background: "var(--accent-maroon)", border: "none", color: "white", cursor: "pointer", fontSize: "14px", display: "flex", alignItems: "center", justifyContent: "center" }}>+</button>
+                  </div>
+                  <span style={{ color: "var(--accent-gold)", fontSize: "13px", fontWeight: 700 }}>Rs. {(item.price * item.quantity).toFixed(0)}</span>
+                </div>
               </div>
-            </div>
-          ))
+            ))}
+          </div>
         )}
       </div>
 
-      {/* Totals & Calculator */}
-      <div
-        style={{ borderTop: "1px solid var(--border-color)" }}
-        className="p-4 space-y-3"
-      >
-        <div className="flex justify-between items-center">
-          <span style={{ color: "var(--text-secondary)" }} className="text-sm">
-            Subtotal
-          </span>
-          <span style={{ color: "var(--text-primary)" }} className="font-semibold">
-            Rs. {subtotal.toFixed(0)}
-          </span>
-        </div>
-        <div
-          style={{ borderTop: "1px solid var(--border-color)" }}
-          className="flex justify-between items-center pt-2"
+      {/* Notes toggle */}
+      <div style={{ padding: "0 12px" }}>
+        <button
+          onClick={() => setShowNotes(!showNotes)}
+          style={{ background: "none", border: "none", color: "var(--text-muted)", fontSize: "12px", cursor: "pointer", padding: "6px 0", display: "flex", alignItems: "center", gap: "4px" }}
         >
-          <span style={{ color: "var(--text-primary)" }} className="font-bold text-lg">
-            TOTAL
-          </span>
-          <span style={{ color: "var(--accent-gold)" }} className="font-bold text-xl">
-            Rs. {subtotal.toFixed(0)}
-          </span>
+          📝 {showNotes ? "Hide" : "Add"} Notes
+        </button>
+        {showNotes && (
+          <textarea
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            placeholder="Order notes..."
+            rows={2}
+            style={{ width: "100%", background: "var(--bg-secondary)", border: "1px solid var(--border-color)", color: "var(--text-primary)", borderRadius: "8px", padding: "8px", fontSize: "12px", outline: "none", resize: "none", marginBottom: "6px" }}
+          />
+        )}
+      </div>
+
+      {/* Totals & Checkout */}
+      <div style={{ borderTop: "1px solid var(--border-color)", padding: "14px" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "6px" }}>
+          <span style={{ color: "var(--text-secondary)", fontSize: "13px" }}>Subtotal</span>
+          <span style={{ color: "var(--text-primary)", fontSize: "13px", fontWeight: 600 }}>Rs. {subtotal.toFixed(0)}</span>
         </div>
 
-        {/* Cash Calculator */}
-        <div style={{ background: "var(--bg-secondary)", borderRadius: "8px" }} className="p-3 space-y-2">
-          <label style={{ color: "var(--text-secondary)" }} className="text-xs font-medium block">
-            Cash Received
-          </label>
+        {/* Discount */}
+        <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "6px" }}>
+          <span style={{ color: "var(--text-secondary)", fontSize: "12px", flex: 1 }}>Discount</span>
+          <input
+            type="number"
+            value={discountInput}
+            onChange={(e) => handleDiscountInput(e.target.value)}
+            placeholder="0"
+            style={{ width: "80px", background: "var(--bg-secondary)", border: "1px solid var(--border-color)", color: "var(--text-primary)", borderRadius: "6px", padding: "4px 8px", fontSize: "12px", textAlign: "right", outline: "none" }}
+          />
+        </div>
+
+        <div style={{ display: "flex", justifyContent: "space-between", paddingTop: "8px", borderTop: "1px solid var(--border-color)", marginBottom: "10px" }}>
+          <span style={{ color: "var(--text-primary)", fontSize: "16px", fontWeight: 700 }}>TOTAL</span>
+          <span style={{ color: "var(--accent-gold)", fontSize: "18px", fontWeight: 700 }}>Rs. {total.toFixed(0)}</span>
+        </div>
+
+        {/* Cash calculator */}
+        <div style={{ background: "var(--bg-secondary)", borderRadius: "8px", padding: "10px", marginBottom: "10px" }}>
+          <label style={{ color: "var(--text-secondary)", fontSize: "11px", display: "block", marginBottom: "6px" }}>Cash Received</label>
           <input
             type="number"
             value={cashInput}
             onChange={(e) => handleCashInput(e.target.value)}
             placeholder="0"
-            style={{
-              background: "var(--bg-card)",
-              border: "1px solid var(--border-color)",
-              color: "var(--text-primary)",
-              borderRadius: "6px",
-            }}
-            className="w-full px-3 py-2 text-right text-lg font-bold outline-none focus:border-amber-400"
+            style={{ width: "100%", background: "var(--bg-card)", border: "1px solid var(--border-color)", color: "var(--text-primary)", borderRadius: "6px", padding: "8px 10px", fontSize: "16px", fontWeight: 700, textAlign: "right", outline: "none" }}
           />
           {cashReceived > 0 && (
-            <div className="flex justify-between">
-              <span style={{ color: "var(--text-secondary)" }} className="text-xs">
-                Change
-              </span>
-              <span
-                style={{ color: change >= 0 ? "var(--success)" : "var(--danger)" }}
-                className="text-sm font-bold"
-              >
-                Rs. {change.toFixed(0)}
-              </span>
+            <div style={{ display: "flex", justifyContent: "space-between", marginTop: "6px" }}>
+              <span style={{ color: "var(--text-secondary)", fontSize: "12px" }}>Change</span>
+              <span style={{ color: change >= 0 ? "var(--success)" : "var(--danger)", fontSize: "13px", fontWeight: 700 }}>Rs. {change.toFixed(0)}</span>
             </div>
           )}
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1.5fr", gap: "8px" }}>
           <button
-            onClick={() => {
-              clearCart();
-              setCashInput("");
-            }}
-            style={{
-              background: "var(--bg-secondary)",
-              border: "1px solid var(--border-color)",
-              color: "var(--text-secondary)",
-            }}
-            className="py-2.5 rounded-lg text-sm font-semibold hover:opacity-80 transition-opacity"
+            onClick={() => { clearCart(); setCashInput(""); setDiscountInput(""); }}
+            style={{ background: "var(--bg-secondary)", border: "1px solid var(--border-color)", color: "var(--text-secondary)", borderRadius: "8px", padding: "11px", fontSize: "13px", fontWeight: 600, cursor: "pointer" }}
           >
             Clear
           </button>
           <button
             onClick={handleComplete}
             disabled={items.length === 0 || loading}
-            style={{
-              background: items.length === 0 ? "var(--bg-secondary)" : "var(--accent-maroon)",
-              color: items.length === 0 ? "var(--text-muted)" : "var(--text-primary)",
-            }}
-            className="py-2.5 rounded-lg text-sm font-semibold hover:opacity-90 transition-opacity disabled:cursor-not-allowed"
+            style={{ background: items.length === 0 ? "var(--bg-secondary)" : "var(--accent-maroon)", color: items.length === 0 ? "var(--text-muted)" : "white", border: "none", borderRadius: "8px", padding: "11px", fontSize: "13px", fontWeight: 700, cursor: items.length === 0 || loading ? "not-allowed" : "pointer", opacity: loading ? 0.7 : 1 }}
           >
-            {loading ? "Processing..." : "✓ Complete Order"}
+            {loading ? "Processing..." : existingOrderId ? "Save & Complete" : orderType === "delivery" ? "Place Order" : "Complete Order"}
           </button>
         </div>
       </div>
