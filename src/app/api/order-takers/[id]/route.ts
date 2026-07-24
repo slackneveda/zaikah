@@ -13,8 +13,11 @@ export async function PATCH(
       data: {
         ...(body.name !== undefined && { name: body.name.trim() }),
         ...(body.phone !== undefined && { phone: body.phone?.trim() || null }),
+        ...(body.designation !== undefined && { designation: body.designation?.trim() || null }),
+        ...(body.departmentId !== undefined && { departmentId: body.departmentId ? parseInt(body.departmentId) : null }),
         ...(body.active !== undefined && { active: body.active }),
       },
+      include: { department: { select: { id: true, name: true } } },
     });
     return NextResponse.json(taker);
   } catch (error) {

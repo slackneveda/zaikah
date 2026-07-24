@@ -33,7 +33,7 @@ export async function POST(request: Request) {
       });
     }
 
-    // Master password verification
+    // Master password verification (legacy: just verifies, no session)
     if (masterPassword !== undefined) {
       const config = await prisma.systemConfig.findUnique({
         where: { key: "master_password" },
@@ -42,6 +42,22 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: "Invalid master password" }, { status: 401 });
       }
       return NextResponse.json({ verified: true });
+    }
+
+    // Admin single-password login
+    if (body.adminPassword !== undefined) {
+      const config = await prisma.systemConfig.findUnique({
+        where: { key: "admin_password" },
+      });
+      // Fall back to master_password if admin_password not set
+      const fallback = await prisma.systemConfig.findUnique({
+        where: { key: "master_password" },
+      });
+      const hash = config?.value ?? fallback?.value;
+      if (!hash || !bcrypt.compareSync(body.adminPassword, hash)) {
+        return NextResponse.json({ error: "Invalid admin password" }, { status: 401 });
+      }
+      return NextResponse.json({ id: 0, name: "Administrator", email: "admin@zaikah.com", role: "admin" });
     }
 
     // Email/password login

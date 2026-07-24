@@ -33,7 +33,6 @@ export default function AdminLoginGate({ children }: Props) {
   const [checked, setChecked] = useState(false);
 
   // Login form state
-  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -57,7 +56,6 @@ export default function AdminLoginGate({ children }: Props) {
   const logout = useCallback(() => {
     sessionStorage.removeItem(SESSION_KEY);
     setAdmin(null);
-    setEmail("");
     setPassword("");
     setError("");
   }, []);
@@ -70,7 +68,7 @@ export default function AdminLoginGate({ children }: Props) {
       const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ adminPassword: password }),
       });
       const data = await res.json();
       if (!res.ok) { setError(data.error ?? "Login failed"); return; }
@@ -240,25 +238,12 @@ export default function AdminLoginGate({ children }: Props) {
             padding: "32px",
           }}
         >
-          <h2 style={{ color: "var(--text-primary)", fontWeight: 800, fontSize: "22px", marginBottom: "6px" }}>Sign In</h2>
-          <p style={{ color: "var(--text-muted)", fontSize: "13px", marginBottom: "24px" }}>Enter your admin credentials to continue</p>
+          <h2 style={{ color: "var(--text-primary)", fontWeight: 800, fontSize: "22px", marginBottom: "6px" }}>Admin Sign In</h2>
+          <p style={{ color: "var(--text-muted)", fontSize: "13px", marginBottom: "24px" }}>Enter your admin password to continue</p>
 
           <form onSubmit={handleLogin} className="space-y-4">
             <div>
-              <label style={{ color: "var(--text-muted)", fontSize: "12px", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }} className="block mb-2">Email</label>
-              <input
-                style={inputStyle}
-                type="email"
-                placeholder="admin@example.com"
-                value={email}
-                onChange={(e) => { setEmail(e.target.value); setError(""); }}
-                autoFocus
-                required
-              />
-            </div>
-
-            <div>
-              <label style={{ color: "var(--text-muted)", fontSize: "12px", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }} className="block mb-2">Password</label>
+              <label style={{ color: "var(--text-muted)", fontSize: "12px", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }} className="block mb-2">Admin Password</label>
               <div style={{ position: "relative" }}>
                 <input
                   style={inputStyle}
@@ -266,6 +251,7 @@ export default function AdminLoginGate({ children }: Props) {
                   placeholder="••••••••"
                   value={password}
                   onChange={(e) => { setPassword(e.target.value); setError(""); }}
+                  autoFocus
                   required
                 />
                 <button

@@ -92,7 +92,7 @@ export default function DineInPage() {
   useEffect(() => {
     fetchTables();
     setOrderType("dine-in");
-    fetch("/api/order-takers").then((r) => r.json()).then(setOrderTakers).catch(() => {});
+    fetch("/api/order-takers").then((r) => r.json()).then((data) => { if (Array.isArray(data)) setOrderTakers(data); }).catch(() => {});
   }, [fetchTables, setOrderType]);
 
   const handleSelectTable = async (table: Table) => {

@@ -25,17 +25,18 @@ model Category {
 }
 
 model Department {
-  id           Int          @id @default(autoincrement())
-  name         String       @unique
-  color        String       @default("#6B7599")
-  printerName  String?
+  id             Int          @id @default(autoincrement())
+  name           String       @unique
+  color          String       @default("#6B7599")
+  printerName    String?
   printerAddress String?
-  printerType  String?
-  active       Boolean      @default(true)
-  createdAt    DateTime     @default(now())
-  updatedAt    DateTime     @updatedAt
-  categories   Category[]
-  orderItems   OrderItem[]
+  printerType    String?
+  active         Boolean      @default(true)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  categories     Category[]
+  orderItems     OrderItem[]
+  orderTakers    OrderTaker[]
 }
 
 model MenuItem {
@@ -74,13 +75,16 @@ model Customer {
 }
 
 model OrderTaker {
-  id        Int      @id @default(autoincrement())
-  name      String
-  phone     String?
-  active    Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  orders    Order[]
+  id           Int         @id @default(autoincrement())
+  name         String
+  designation  String?
+  phone        String?
+  active       Boolean     @default(true)
+  departmentId Int?
+  department   Department? @relation(fields: [departmentId], references: [id])
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+  orders       Order[]
 }
 
 model Rider {
