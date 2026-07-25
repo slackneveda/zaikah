@@ -277,6 +277,7 @@ export default function DeliveryPage() {
               onOrderComplete={handleOrderComplete}
               onAddMoreItems={handleAddMoreItems}
               orderTakerId={selectedOrderTaker}
+              orderTakerName={orderTakers.find((ot) => ot.id === selectedOrderTaker)?.name ?? null}
               existingOrderId={existingDeliveryOrderId ?? undefined}
               riderId={selectedRider}
               customerId={customer?.id}

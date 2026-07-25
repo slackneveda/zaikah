@@ -3,9 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
+    "dev": "node init && next dev -H 0.0.0.0",
+    "build": "node init && next build",
+    "start": "node init && next start -H 0.0.0.0",
     "lint": "eslint",
     "db:migrate": "prisma migrate dev --name init",
     "db:seed": "ts-node --compiler-options {\"module\":\"CommonJS\"} prisma/seed.ts",

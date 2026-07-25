@@ -192,6 +192,7 @@ export default function TakeawayPage() {
               onOrderComplete={handleOrderComplete}
               onAddMoreItems={handleAddMoreItems}
               orderTakerId={selectedOrderTaker}
+              orderTakerName={orderTakers.find((ot) => ot.id === selectedOrderTaker)?.name ?? null}
               existingOrderId={existingOrder?.id}
             />
           </div>

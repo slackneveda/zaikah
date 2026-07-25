@@ -11,6 +11,7 @@ interface StationTicketProps {
   tableName?: string | null;
   customerName?: string | null;
   customerPhone?: string | null;
+  orderTakerName?: string | null;
   items: TicketItem[];
 }
 
@@ -21,6 +22,7 @@ export default function StationTicket({
   tableName,
   customerName,
   customerPhone,
+  orderTakerName,
   items,
 }: StationTicketProps) {
   const now = new Date();
@@ -87,6 +89,12 @@ export default function StationTicket({
           <div style={{ display: "flex", justifyContent: "space-between" }}>
             <strong>Phone:</strong>
             <span>{customerPhone}</span>
+          </div>
+        )}
+        {orderTakerName && (
+          <div style={{ display: "flex", justifyContent: "space-between" }}>
+            <strong>Order Taker:</strong>
+            <span>{orderTakerName}</span>
           </div>
         )}
         <div style={{ display: "flex", justifyContent: "space-between" }}>

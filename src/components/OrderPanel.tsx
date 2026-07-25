@@ -10,6 +10,7 @@ interface OrderPanelProps {
   onOrderPlaced?: () => void;
   onAddMoreItems?: (orderId: number, orderNumber: string) => void;
   orderTakerId?: number | null;
+  orderTakerName?: string | null;
   existingOrderId?: number;
   customerId?: number | null;
   riderId?: number | null;
@@ -24,6 +25,7 @@ export default function OrderPanel({
   onOrderPlaced,
   onAddMoreItems,
   orderTakerId,
+  orderTakerName,
   existingOrderId,
   customerId,
   riderId,
@@ -236,6 +238,7 @@ export default function OrderPanel({
                   tableName={snapTableName}
                   customerName={customerName}
                   customerPhone={customerPhone}
+                  orderTakerName={orderTakerName}
                   items={snapKitchen.map((i) => ({ name: i.name, quantity: i.quantity, notes: i.notes }))}
                 />
               </div>
@@ -249,6 +252,7 @@ export default function OrderPanel({
                   tableName={snapTableName}
                   customerName={customerName}
                   customerPhone={customerPhone}
+                  orderTakerName={orderTakerName}
                   items={snapDrinks.map((i) => ({ name: i.name, quantity: i.quantity, notes: i.notes }))}
                 />
               </div>
@@ -267,6 +271,7 @@ export default function OrderPanel({
                 customerName={customerName}
                 customerPhone={customerPhone}
                 customerAddress={customerAddress}
+                orderTakerName={orderTakerName ?? undefined}
               />
             </div>
           </div>
