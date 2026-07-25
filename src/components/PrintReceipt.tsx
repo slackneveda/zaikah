@@ -42,8 +42,8 @@ export default function PrintReceipt({
   const tableDisplay = tableName ?? (tableNumber ? String(tableNumber) : null);
 
   const typeLabel =
-    orderType === "dine-in" ? `Dine-In${tableDisplay ? ` (${tableDisplay})` : ""}`
-    : orderType === "takeaway" ? `Takeaway${tableDisplay ? ` (${tableDisplay})` : ""}`
+    orderType === "dine-in" ? "Dine-In"
+    : orderType === "takeaway" ? "Takeaway"
     : orderType === "delivery" ? "Home Delivery"
     : orderType;
 
@@ -62,7 +62,7 @@ export default function PrintReceipt({
       {/* Header */}
       <div style={{ textAlign: "center", marginBottom: "8px" }}>
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/logo.jpeg" alt="ZAIKAH" style={{ width: "80px", height: "80px", objectFit: "contain", borderRadius: "50%", margin: "0 auto 6px" }} />
+        <img src="/logo light.jpeg" alt="ZAIKAH" style={{ width: "100px", height: "100px", objectFit: "contain", display: "block", margin: "0 auto 4px" }} />
         <div style={{ fontSize: "20px", fontWeight: "bold", letterSpacing: "2px" }}>ZAIKAH</div>
         <div style={{ fontSize: "12px" }}>ذائقہ</div>
         <div style={{ fontSize: "10px", marginTop: "2px" }}>Flavour That Feels Like Home</div>
@@ -75,6 +75,7 @@ export default function PrintReceipt({
         <div><strong>Date:</strong> {dateStr}</div>
         <div><strong>Time:</strong> {timeStr}</div>
         <div><strong>Type:</strong> {typeLabel}</div>
+        {tableDisplay && <div><strong>Table:</strong> {tableDisplay}</div>}
         {orderTakerName && <div><strong>Order Taker:</strong> {orderTakerName}</div>}
         {riderName && <div><strong>Rider:</strong> {riderName}</div>}
       </div>
@@ -94,17 +95,38 @@ export default function PrintReceipt({
 
       <div style={{ borderTop: "1px dashed #000", margin: "6px 0" }} />
 
-      {/* Items */}
+      {/* Items Table */}
       <div style={{ marginBottom: "6px" }}>
-        <div style={{ fontWeight: "bold", fontSize: "11px", marginBottom: "4px" }}>Items:</div>
+        {/* Column Headers */}
+        <div style={{
+          display: "grid",
+          gridTemplateColumns: "1fr 28px 60px",
+          gap: "0 4px",
+          fontWeight: "bold",
+          fontSize: "10px",
+          borderBottom: "1px dashed #000",
+          paddingBottom: "3px",
+          marginBottom: "3px",
+        }}>
+          <span>ITEM</span>
+          <span style={{ textAlign: "center" }}>QTY</span>
+          <span style={{ textAlign: "right" }}>PRICE</span>
+        </div>
+        {/* Rows */}
         {items.map((item, i) => (
-          <div key={i}>
-            <div style={{ display: "flex", justifyContent: "space-between" }}>
-              <span style={{ maxWidth: "60%" }}>{item.name} x{item.quantity}</span>
-              <span>Rs. {(item.price * item.quantity).toFixed(0)}</span>
+          <div key={i} style={{ marginBottom: "2px" }}>
+            <div style={{
+              display: "grid",
+              gridTemplateColumns: "1fr 28px 60px",
+              gap: "0 4px",
+              fontSize: "11px",
+            }}>
+              <span style={{ wordBreak: "break-word" }}>{item.name}</span>
+              <span style={{ textAlign: "center" }}>{item.quantity}</span>
+              <span style={{ textAlign: "right" }}>{(item.price * item.quantity).toFixed(0)}</span>
             </div>
             {item.notes && (
-              <div style={{ fontSize: "10px", color: "#555", paddingLeft: "8px" }}>Note: {item.notes}</div>
+              <div style={{ fontSize: "10px", color: "#555", paddingLeft: "4px" }}>↳ {item.notes}</div>
             )}
           </div>
         ))}
@@ -113,28 +135,30 @@ export default function PrintReceipt({
       <div style={{ borderTop: "1px dashed #000", margin: "6px 0" }} />
 
       {/* Totals */}
-      <div style={{ fontSize: "12px" }}>
-        <div style={{ display: "flex", justifyContent: "space-between" }}>
+      <div style={{ fontSize: "11px" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "2px" }}>
           <span>Subtotal</span>
-          <span>Rs. {subtotal.toFixed(0)}</span>
+          <span>{subtotal.toFixed(0)}</span>
         </div>
         {discount > 0 && (
-          <div style={{ display: "flex", justifyContent: "space-between" }}>
-            <span>Discount</span>
-            <span>- Rs. {discount.toFixed(0)}</span>
+          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "2px" }}>
+            <span>Discount ({discount.toFixed(0)}%)</span>
+            <span style={{ fontWeight: "bold" }}>- {(subtotal * discount / 100).toFixed(0)}</span>
           </div>
         )}
-        <div style={{ display: "flex", justifyContent: "space-between", fontWeight: "bold", marginTop: "2px", fontSize: "13px" }}>
+        <div style={{ borderTop: "1px dashed #000", margin: "4px 0" }} />
+        <div style={{ display: "flex", justifyContent: "space-between", fontWeight: "bold", fontSize: "13px", marginBottom: "4px" }}>
           <span>TOTAL</span>
           <span>Rs. {displayTotal.toFixed(0)}</span>
         </div>
-        <div style={{ display: "flex", justifyContent: "space-between", marginTop: "4px" }}>
+        <div style={{ borderTop: "1px dashed #000", margin: "4px 0" }} />
+        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "2px" }}>
           <span>Cash Received</span>
           <span>Rs. {cashReceived.toFixed(0)}</span>
         </div>
         <div style={{ display: "flex", justifyContent: "space-between" }}>
           <span>Change</span>
-          <span>Rs. {change.toFixed(0)}</span>
+          <span style={{ fontWeight: "bold" }}>Rs. {change.toFixed(0)}</span>
         </div>
       </div>
 

@@ -3,10 +3,12 @@
 import { useOrderStore } from "@/store/orderStore";
 import { useState, useCallback } from "react";
 import PrintReceipt from "./PrintReceipt";
+import StationTicket from "./StationTicket";
 
 interface OrderPanelProps {
   onOrderComplete?: (orderId: number, orderNumber: string) => void;
   onOrderPlaced?: () => void;
+  onAddMoreItems?: (orderId: number, orderNumber: string) => void;
   orderTakerId?: number | null;
   existingOrderId?: number;
   customerId?: number | null;
@@ -20,6 +22,7 @@ interface OrderPanelProps {
 export default function OrderPanel({
   onOrderComplete,
   onOrderPlaced,
+  onAddMoreItems,
   orderTakerId,
   existingOrderId,
   customerId,
@@ -49,7 +52,22 @@ export default function OrderPanel({
   } = useOrderStore();
 
   const [loading, setLoading] = useState(false);
-  const [completedOrder, setCompletedOrder] = useState<{ id: number; orderNumber: string } | null>(null);
+  const [completedOrder, setCompletedOrder] = useState<{
+    id: number;
+    orderNumber: string;
+    snapshotTableName: string | null;
+    snapshotItems: typeof items;       // only the newly added items (for kitchen/drinks tickets)
+    allItems: { name: string; price: number; quantity: number; notes?: string }[]; // full order (for main receipt)
+    snapshotOrderType: string;
+    snapshotSubtotal: number;
+    snapshotTotal: number;
+    snapshotChange: number;
+    snapshotCashReceived: number;
+    snapshotDiscount: number;
+    allSubtotal: number;
+    allTotal: number;
+    allDiscount: number;
+  } | null>(null);
   const [cashInput, setCashInput] = useState("");
   const [discountInput, setDiscountInput] = useState("");
   const [showNotes, setShowNotes] = useState(false);
@@ -67,7 +85,7 @@ export default function OrderPanel({
   const handleDiscountInput = useCallback((val: string) => {
     setDiscountInput(val);
     const num = parseFloat(val);
-    setDiscount(isNaN(num) ? 0 : num);
+    setDiscount(isNaN(num) ? 0 : Math.min(100, Math.max(0, num)));
   }, [setDiscount]);
 
   const handleComplete = useCallback(async () => {
@@ -100,11 +118,18 @@ export default function OrderPanel({
 
       let res: Response;
       if (existingOrderId) {
-        // Update existing order
+        // Append new items to existing order
         res = await fetch(`/api/orders/${existingOrderId}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ ...payload, items }),
+          body: JSON.stringify({
+            appendItems: payload.items,
+            cashReceived: payload.cashReceived,
+            discount: payload.discount,
+            orderTakerId: payload.orderTakerId,
+            tableId: payload.tableId,
+            status: payload.status,
+          }),
         });
       } else {
         res = await fetch("/api/orders", {
@@ -119,7 +144,30 @@ export default function OrderPanel({
         throw new Error(err.error || "Order failed");
       }
       const order = await res.json();
-      setCompletedOrder({ id: order.id, orderNumber: order.orderNumber });
+      // For append flow: use the full order items from DB response for the main receipt
+      const isAppend = !!existingOrderId;
+      const fullItems: { name: string; price: number; quantity: number; notes?: string }[] = isAppend && Array.isArray(order.items)
+        ? order.items.map((i: { name: string; price: number; quantity: number; notes?: string | null }) => ({ name: i.name, price: i.price, quantity: i.quantity, notes: i.notes ?? undefined }))
+        : [...items];
+      const fullSubtotal: number = isAppend ? (order.subtotal ?? subtotal) : subtotal;
+      const fullTotal: number = isAppend ? (order.total ?? total) : total;
+      const fullDiscount: number = isAppend ? (order.discount ?? discount) : discount;
+      setCompletedOrder({
+        id: order.id,
+        orderNumber: order.orderNumber,
+        snapshotTableName: useOrderStore.getState().tableName,
+        snapshotItems: [...items],
+        allItems: fullItems,
+        snapshotOrderType: orderType,
+        snapshotSubtotal: subtotal,
+        snapshotTotal: total,
+        snapshotChange: change,
+        snapshotCashReceived: cashReceived || total,
+        snapshotDiscount: discount,
+        allSubtotal: fullSubtotal,
+        allTotal: fullTotal,
+        allDiscount: fullDiscount,
+      });
       onOrderPlaced?.();
     } catch (err) {
       console.error(err);
@@ -138,7 +186,37 @@ export default function OrderPanel({
     if (finished) onOrderComplete?.(finished.id, finished.orderNumber);
   }, [clearCart, completedOrder, onOrderComplete]);
 
+  const handleAddMoreItems = useCallback(() => {
+    const finished = completedOrder;
+    clearCart();
+    setCompletedOrder(null);
+    setCashInput("");
+    setDiscountInput("");
+    if (finished) onAddMoreItems?.(finished.id, finished.orderNumber);
+  }, [clearCart, completedOrder, onAddMoreItems]);
+
+  const printSection = useCallback((elementId: string) => {
+    const el = document.getElementById(elementId);
+    if (!el) return;
+    const html = el.innerHTML;
+    const win = window.open("", "_blank", "width=400,height=600");
+    if (!win) return;
+    win.document.write(`<!DOCTYPE html><html><head><title>Print</title><style>body{margin:0;padding:0;background:#fff;} @media print{body{margin:0;}}</style></head><body>${html}</body></html>`);
+    win.document.close();
+    win.focus();
+    win.print();
+    win.close();
+  }, []);
+
+  const kitchenItems = items.filter((i) => i.departmentName === "Kitchen");
+  const drinksItems = items.filter((i) => i.departmentName === "Drinks");
+
   if (completedOrder) {
+    const snapKitchen = completedOrder.snapshotItems.filter((i) => i.departmentName === "Kitchen");
+    const snapDrinks = completedOrder.snapshotItems.filter((i) => i.departmentName === "Drinks");
+    const snapTableName = completedOrder.snapshotTableName;
+    const snapOrderType = completedOrder.snapshotOrderType;
+
     return (
       <div style={{ background: "var(--bg-card)", borderLeft: "1px solid var(--border-color)" }} className="flex flex-col h-full">
         <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", alignItems: "center", padding: "16px 12px", gap: "12px" }}>
@@ -146,28 +224,85 @@ export default function OrderPanel({
             <div style={{ width: "48px", height: "48px", borderRadius: "50%", background: "rgba(34,197,94,0.15)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "22px" }}>✓</div>
             <p style={{ color: "var(--success)", fontWeight: 700, fontSize: "16px", margin: 0 }}>Order Complete!</p>
           </div>
-          <div id="print-receipt" style={{ background: "#fff", color: "#000", borderRadius: "8px", boxShadow: "0 2px 16px rgba(0,0,0,0.25)", width: "100%", maxWidth: "300px" }}>
-            <PrintReceipt
-              orderNumber={completedOrder.orderNumber}
-              items={items}
-              subtotal={subtotal}
-              discount={discount}
-              total={total}
-              cashReceived={cashReceived || total}
-              change={change}
-              orderType={orderType}
-              tableName={tableName}
-              customerName={customerName}
-              customerPhone={customerPhone}
-              customerAddress={customerAddress}
-            />
+
+          {/* Hidden print containers */}
+          <div style={{ position: "absolute", left: "-9999px", top: 0, pointerEvents: "none" }}>
+            {snapKitchen.length > 0 && (
+              <div id="print-kitchen">
+                <StationTicket
+                  station="Kitchen"
+                  orderNumber={completedOrder.orderNumber}
+                  orderType={snapOrderType}
+                  tableName={snapTableName}
+                  customerName={customerName}
+                  customerPhone={customerPhone}
+                  items={snapKitchen.map((i) => ({ name: i.name, quantity: i.quantity, notes: i.notes }))}
+                />
+              </div>
+            )}
+            {snapDrinks.length > 0 && (
+              <div id="print-drinks">
+                <StationTicket
+                  station="Drinks"
+                  orderNumber={completedOrder.orderNumber}
+                  orderType={snapOrderType}
+                  tableName={snapTableName}
+                  customerName={customerName}
+                  customerPhone={customerPhone}
+                  items={snapDrinks.map((i) => ({ name: i.name, quantity: i.quantity, notes: i.notes }))}
+                />
+              </div>
+            )}
+            <div id="print-receipt">
+              <PrintReceipt
+                orderNumber={completedOrder.orderNumber}
+                items={completedOrder.allItems}
+                subtotal={completedOrder.allSubtotal}
+                discount={completedOrder.allDiscount}
+                total={completedOrder.allTotal}
+                cashReceived={completedOrder.snapshotCashReceived}
+                change={completedOrder.allTotal - completedOrder.snapshotCashReceived}
+                orderType={snapOrderType}
+                tableName={snapTableName}
+                customerName={customerName}
+                customerPhone={customerPhone}
+                customerAddress={customerAddress}
+              />
+            </div>
           </div>
-          <button onClick={() => window.print()} style={{ background: "var(--accent-maroon)", color: "var(--text-primary)", border: "none", borderRadius: "8px", padding: "11px 0", fontWeight: 600, fontSize: "14px", cursor: "pointer", width: "100%", maxWidth: "300px" }}>
-            🖨️ Print Receipt
+
+          {/* Print Buttons */}
+          {snapKitchen.length > 0 && (
+            <button
+              onClick={() => printSection("print-kitchen")}
+              style={{ background: "#ef4444", color: "#fff", border: "none", borderRadius: "8px", padding: "11px 0", fontWeight: 600, fontSize: "14px", cursor: "pointer", width: "100%", maxWidth: "300px" }}
+            >
+              🍽️ Print Kitchen Ticket
+            </button>
+          )}
+          {snapDrinks.length > 0 && (
+            <button
+              onClick={() => printSection("print-drinks")}
+              style={{ background: "#22c55e", color: "#fff", border: "none", borderRadius: "8px", padding: "11px 0", fontWeight: 600, fontSize: "14px", cursor: "pointer", width: "100%", maxWidth: "300px" }}
+            >
+              🥤 Print Drinks Ticket
+            </button>
+          )}
+          <button
+            onClick={() => printSection("print-receipt")}
+            style={{ background: "var(--accent-maroon)", color: "var(--text-primary)", border: "none", borderRadius: "8px", padding: "11px 0", fontWeight: 600, fontSize: "14px", cursor: "pointer", width: "100%", maxWidth: "300px" }}
+          >
+            🖨️ Print Main Receipt
           </button>
-          <button onClick={handleNewOrder} style={{ background: "var(--bg-secondary)", color: "var(--text-primary)", border: "1px solid var(--border-color)", borderRadius: "8px", padding: "11px 0", fontWeight: 600, fontSize: "14px", cursor: "pointer", width: "100%", maxWidth: "300px" }}>
-            New Order
-          </button>
+          {onAddMoreItems ? (
+            <button onClick={handleAddMoreItems} style={{ background: "var(--accent-maroon)", color: "var(--text-primary)", border: "none", borderRadius: "8px", padding: "11px 0", fontWeight: 600, fontSize: "14px", cursor: "pointer", width: "100%", maxWidth: "300px" }}>
+              + Add More Items
+            </button>
+          ) : (
+            <button onClick={handleNewOrder} style={{ background: "var(--bg-secondary)", color: "var(--text-primary)", border: "1px solid var(--border-color)", borderRadius: "8px", padding: "11px 0", fontWeight: 600, fontSize: "14px", cursor: "pointer", width: "100%", maxWidth: "300px" }}>
+              New Order
+            </button>
+          )}
         </div>
       </div>
     );
@@ -250,16 +385,26 @@ export default function OrderPanel({
         </div>
 
         {/* Discount */}
-        <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "6px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: discount > 0 ? "2px" : "6px" }}>
           <span style={{ color: "var(--text-secondary)", fontSize: "12px", flex: 1 }}>Discount</span>
-          <input
-            type="number"
-            value={discountInput}
-            onChange={(e) => handleDiscountInput(e.target.value)}
-            placeholder="0"
-            style={{ width: "80px", background: "var(--bg-secondary)", border: "1px solid var(--border-color)", color: "var(--text-primary)", borderRadius: "6px", padding: "4px 8px", fontSize: "12px", textAlign: "right", outline: "none" }}
-          />
+          <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+            <input
+              type="number"
+              value={discountInput}
+              onChange={(e) => handleDiscountInput(e.target.value)}
+              placeholder="0"
+              min={0}
+              max={100}
+              style={{ width: "60px", background: "var(--bg-secondary)", border: "1px solid var(--border-color)", color: "var(--text-primary)", borderRadius: "6px", padding: "4px 8px", fontSize: "12px", textAlign: "right", outline: "none" }}
+            />
+            <span style={{ color: "var(--text-muted)", fontSize: "12px" }}>%</span>
+          </div>
         </div>
+        {discount > 0 && (
+          <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: "6px" }}>
+            <span style={{ color: "var(--danger)", fontSize: "11px" }}>- Rs. {(subtotal * discount / 100).toFixed(0)}</span>
+          </div>
+        )}
 
         <div style={{ display: "flex", justifyContent: "space-between", paddingTop: "8px", borderTop: "1px solid var(--border-color)", marginBottom: "10px" }}>
           <span style={{ color: "var(--text-primary)", fontSize: "16px", fontWeight: 700 }}>TOTAL</span>

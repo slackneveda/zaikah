@@ -11,7 +11,7 @@ interface AdminUser {
 }
 
 interface Props {
-  children: (admin: AdminUser, logout: () => void) => React.ReactNode;
+  children: (admin: AdminUser, logout: () => void, openChangePw: () => void) => React.ReactNode;
 }
 
 const SESSION_KEY = "zaikah_admin_session";
@@ -113,42 +113,7 @@ export default function AdminLoginGate({ children }: Props) {
   if (admin) {
     return (
       <>
-        {children(admin, logout)}
-
-        {/* Floating admin bar at bottom-right */}
-        <div
-          style={{
-            position: "fixed",
-            bottom: "20px",
-            right: "20px",
-            background: "var(--bg-card)",
-            border: "1px solid var(--border-color)",
-            borderRadius: "14px",
-            padding: "10px 16px",
-            display: "flex",
-            alignItems: "center",
-            gap: "12px",
-            zIndex: 100,
-            boxShadow: "0 4px 24px rgba(0,0,0,0.4)",
-          }}
-        >
-          <div>
-            <p style={{ color: "var(--text-primary)", fontSize: "13px", fontWeight: 700 }}>{admin.name}</p>
-            <p style={{ color: "var(--text-muted)", fontSize: "11px" }}>{admin.email}</p>
-          </div>
-          <button
-            onClick={() => { setShowChangePw(true); setCpForm({ current: "", next: "", confirm: "" }); setCpError(""); setCpSuccess(false); }}
-            style={{ background: "rgba(96,165,250,0.12)", color: "#60A5FA", border: "1px solid rgba(96,165,250,0.3)", borderRadius: "8px", padding: "5px 10px", fontSize: "12px", fontWeight: 600, cursor: "pointer" }}
-          >
-            🔑 Change Password
-          </button>
-          <button
-            onClick={logout}
-            style={{ background: "rgba(239,68,68,0.1)", color: "var(--danger)", border: "1px solid rgba(239,68,68,0.3)", borderRadius: "8px", padding: "5px 10px", fontSize: "12px", fontWeight: 600, cursor: "pointer" }}
-          >
-            Logout
-          </button>
-        </div>
+        {children(admin, logout, () => { setShowChangePw(true); setCpForm({ current: "", next: "", confirm: "" }); setCpError(""); setCpSuccess(false); })}
 
         {/* Change Password Modal */}
         {showChangePw && (

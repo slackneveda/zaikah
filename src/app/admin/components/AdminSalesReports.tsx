@@ -18,6 +18,39 @@ interface Stats {
   topItems: { name: string; quantity: number }[];
 }
 
+interface OrderItem {
+  id: number;
+  name: string;
+  price: number;
+  quantity: number;
+  subtotal: number;
+  notes?: string | null;
+  department?: { name: string } | null;
+}
+
+interface Order {
+  id: number;
+  orderNumber: string;
+  type: string;
+  status: string;
+  createdAt: string;
+  subtotal: number;
+  discount: number;
+  tax: number;
+  total: number;
+  cashReceived?: number | null;
+  change?: number | null;
+  notes?: string | null;
+  customerName?: string | null;
+  customerPhone?: string | null;
+  customerAddress?: string | null;
+  table?: { name: string } | null;
+  customer?: { name: string; phone: string; address?: string | null } | null;
+  orderTaker?: { name: string } | null;
+  rider?: { name: string } | null;
+  items: OrderItem[];
+}
+
 const CHART_COLORS = ["#7A1F2B", "#E8A33D", "#3B82F6", "#22c55e", "#A855F7"];
 
 function todayStr() { return new Date().toISOString().slice(0, 10); }
@@ -62,28 +95,113 @@ export default function AdminSalesReports() {
     fetchStats();
   };
 
-  const handleExport = () => {
+  const handleExport = async () => {
     if (!stats) return;
+
+    // Fetch full order details for the date range
+    let orders: Order[] = [];
+    try {
+      const res = await fetch(`/api/orders?from=${fromDate}&to=${toDate}&status=completed&limit=5000`);
+      orders = await res.json();
+    } catch { /* proceed without order details */ }
+
     const wb = XLSX.utils.book_new();
+
+    // Sheet 1: Summary
     const summaryRows = [
+      { Metric: "Restaurant", Value: "ZAIKAH ذائقہ" },
+      { Metric: "Report Generated", Value: new Date().toLocaleString("en-PK") },
       { Metric: "Date Range", Value: `${fromDate} to ${toDate}` },
+      { Metric: "", Value: "" },
       { Metric: "Total Revenue (Rs.)", Value: stats.todayStats.totalSales },
       { Metric: "Total Orders", Value: stats.todayStats.completedOrders },
       { Metric: "Takeaway Orders", Value: stats.todayStats.takeawayOrders },
       { Metric: "Dine-In Orders", Value: stats.todayStats.dineInOrders },
     ];
     const ws1 = XLSX.utils.json_to_sheet(summaryRows);
-    ws1["!cols"] = [{ wch: 28 }, { wch: 20 }];
+    ws1["!cols"] = [{ wch: 28 }, { wch: 30 }];
     XLSX.utils.book_append_sheet(wb, ws1, "Summary");
-    const revenueRows = stats.dailyRevenue.map((d) => ({ "Date": d.date, "Revenue (Rs.)": d.revenue }));
-    const ws2 = XLSX.utils.json_to_sheet(revenueRows);
-    ws2["!cols"] = [{ wch: 14 }, { wch: 16 }];
-    XLSX.utils.book_append_sheet(wb, ws2, "Daily Revenue");
-    const itemRows = stats.topItems.map((item, i) => ({ "Rank": i + 1, "Item Name": item.name, "Qty Sold": item.quantity }));
-    const ws3 = XLSX.utils.json_to_sheet(itemRows);
-    ws3["!cols"] = [{ wch: 6 }, { wch: 28 }, { wch: 12 }];
-    XLSX.utils.book_append_sheet(wb, ws3, "Top Items");
-    XLSX.writeFile(wb, `ZAIKAH_AdminReport_${fromDate}_to_${toDate}.xlsx`);
+
+    // Sheet 2: All Orders (one row per order)
+    if (orders.length > 0) {
+      const orderRows = orders.map((o) => ({
+        "Order #": o.orderNumber,
+        "Date": new Date(o.createdAt).toLocaleDateString("en-PK"),
+        "Time": new Date(o.createdAt).toLocaleTimeString("en-PK"),
+        "Type": o.type,
+        "Status": o.status,
+        "Table": o.table?.name ?? (o.type === "dine-in" ? "(no table linked)" : ""),
+        "Customer Name": o.customerName ?? o.customer?.name ?? "",
+        "Customer Phone": o.customerPhone ?? o.customer?.phone ?? "",
+        "Customer Address": o.customerAddress ?? o.customer?.address ?? "",
+        "Order Taker": o.orderTaker?.name ?? "",
+        "Rider": o.rider?.name ?? "",
+        "Items Count": o.items.reduce((sum, i) => sum + i.quantity, 0),
+        "Subtotal (Rs.)": o.subtotal,
+        "Discount (Rs.)": o.discount,
+        "Tax (Rs.)": o.tax,
+        "Total (Rs.)": o.total,
+        "Cash Received (Rs.)": o.cashReceived ?? "",
+        "Change (Rs.)": o.change ?? "",
+        "Notes": o.notes ?? "",
+      }));
+      const ws2 = XLSX.utils.json_to_sheet(orderRows);
+      ws2["!cols"] = [
+        { wch: 18 }, { wch: 12 }, { wch: 10 }, { wch: 10 }, { wch: 10 },
+        { wch: 10 }, { wch: 20 }, { wch: 16 }, { wch: 28 },
+        { wch: 18 }, { wch: 16 }, { wch: 12 },
+        { wch: 14 }, { wch: 14 }, { wch: 10 }, { wch: 12 },
+        { wch: 16 }, { wch: 12 }, { wch: 24 },
+      ];
+      XLSX.utils.book_append_sheet(wb, ws2, "All Orders");
+
+      // Sheet 3: Order Items Detail (one row per item)
+      const itemDetailRows = orders.flatMap((o) =>
+        o.items.map((item) => ({
+          "Order #": o.orderNumber,
+          "Date": new Date(o.createdAt).toLocaleDateString("en-PK"),
+          "Time": new Date(o.createdAt).toLocaleTimeString("en-PK"),
+          "Order Type": o.type,
+          "Table": o.table?.name ?? (o.type === "dine-in" ? "(no table linked)" : ""),
+          "Customer": o.customerName ?? o.customer?.name ?? "",
+          "Item Name": item.name,
+          "Department": item.department?.name ?? "",
+          "Unit Price (Rs.)": item.price,
+          "Qty": item.quantity,
+          "Item Total (Rs.)": item.subtotal,
+          "Item Notes": item.notes ?? "",
+          "Order Total (Rs.)": o.total,
+        }))
+      );
+      const ws3 = XLSX.utils.json_to_sheet(itemDetailRows);
+      ws3["!cols"] = [
+        { wch: 18 }, { wch: 12 }, { wch: 10 }, { wch: 10 }, { wch: 10 },
+        { wch: 20 }, { wch: 28 }, { wch: 16 }, { wch: 16 },
+        { wch: 6 }, { wch: 16 }, { wch: 20 }, { wch: 14 },
+      ];
+      XLSX.utils.book_append_sheet(wb, ws3, "Order Items Detail");
+    }
+
+    // Sheet 4: Daily Revenue
+    const revenueRows = stats.dailyRevenue.map((d) => ({
+      "Date": d.date,
+      "Revenue (Rs.)": d.revenue,
+    }));
+    const ws4 = XLSX.utils.json_to_sheet(revenueRows);
+    ws4["!cols"] = [{ wch: 14 }, { wch: 16 }];
+    XLSX.utils.book_append_sheet(wb, ws4, "Daily Revenue");
+
+    // Sheet 5: Top Selling Items
+    const itemRows = stats.topItems.map((item, i) => ({
+      "Rank": i + 1,
+      "Item Name": item.name,
+      "Qty Sold": item.quantity,
+    }));
+    const ws5 = XLSX.utils.json_to_sheet(itemRows);
+    ws5["!cols"] = [{ wch: 6 }, { wch: 28 }, { wch: 12 }];
+    XLSX.utils.book_append_sheet(wb, ws5, "Top Items");
+
+    XLSX.writeFile(wb, `ZAIKAH_Report_${fromDate}_to_${toDate}.xlsx`);
   };
 
   const revenueData = stats?.dailyRevenue.map((d) => ({

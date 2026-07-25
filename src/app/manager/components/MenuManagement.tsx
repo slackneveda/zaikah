@@ -15,10 +15,19 @@ interface Category {
   name: string;
   icon: string | null;
   items: MenuItem[];
+  department: { id: number; name: string } | null;
 }
+
+type SectionType = "kitchen" | "drinks";
+
+const SECTION_DEPT: Record<SectionType, string> = {
+  kitchen: "Kitchen",
+  drinks: "Drinks",
+};
 
 export default function MenuManagement() {
   const [categories, setCategories] = useState<Category[]>([]);
+  const [activeSection, setActiveSection] = useState<SectionType>("kitchen");
   const [activeCategory, setActiveCategory] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [showItemForm, setShowItemForm] = useState(false);
@@ -31,13 +40,16 @@ export default function MenuManagement() {
     categoryId: "",
     available: true,
   });
-  const [catForm, setCatForm] = useState({ name: "", icon: "" });
+  const [catForm, setCatForm] = useState({ name: "", icon: "", section: "kitchen" as SectionType });
 
   const fetchCategories = async () => {
     const res = await fetch("/api/categories");
-    const data = await res.json();
+    const data: Category[] = await res.json();
     setCategories(data);
-    if (data.length > 0 && !activeCategory) setActiveCategory(data[0].id);
+    if (!activeCategory) {
+      const first = data.find((c) => c.department?.name === "Kitchen");
+      if (first) setActiveCategory(first.id);
+    }
     setLoading(false);
   };
 
@@ -46,8 +58,18 @@ export default function MenuManagement() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const sectionCategories = categories.filter(
+    (c) => c.department?.name === SECTION_DEPT[activeSection]
+  );
+
   const activeItems =
-    categories.find((c) => c.id === activeCategory)?.items ?? [];
+    sectionCategories.find((c) => c.id === activeCategory)?.items ?? [];
+
+  const handleSectionChange = (section: SectionType) => {
+    setActiveSection(section);
+    const first = categories.find((c) => c.department?.name === SECTION_DEPT[section]);
+    setActiveCategory(first?.id ?? null);
+  };
 
   const handleSaveItem = async () => {
     if (!itemForm.name || !itemForm.price || !itemForm.categoryId) return;
@@ -97,13 +119,16 @@ export default function MenuManagement() {
 
   const handleSaveCategory = async () => {
     if (!catForm.name) return;
+    // Resolve department id by name from already-loaded categories
+    const deptName = SECTION_DEPT[catForm.section];
+    const deptId = categories.find((c) => c.department?.name === deptName)?.department?.id ?? null;
     await fetch("/api/categories", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: catForm.name, icon: catForm.icon }),
+      body: JSON.stringify({ name: catForm.name, icon: catForm.icon, departmentId: deptId }),
     });
     setShowCatForm(false);
-    setCatForm({ name: "", icon: "" });
+    setCatForm({ name: "", icon: "", section: activeSection });
     fetchCategories();
   };
 
@@ -153,6 +178,29 @@ export default function MenuManagement() {
         style={{ background: "var(--bg-secondary)", borderRight: "1px solid var(--border-color)", width: "220px", flexShrink: 0 }}
         className="flex flex-col"
       >
+        {/* Section switcher */}
+        <div style={{ borderBottom: "1px solid var(--border-color)" }} className="flex">
+          {(["kitchen", "drinks"] as SectionType[]).map((section) => (
+            <button
+              key={section}
+              onClick={() => handleSectionChange(section)}
+              style={{
+                flex: 1,
+                padding: "8px 0",
+                background: activeSection === section ? "var(--accent-maroon)" : "transparent",
+                color: activeSection === section ? "var(--text-primary)" : "var(--text-muted)",
+                border: "none",
+                borderBottom: activeSection === section ? "2px solid var(--accent-gold)" : "2px solid transparent",
+                fontSize: "12px",
+                fontWeight: activeSection === section ? 700 : 500,
+                cursor: "pointer",
+                transition: "all 0.15s",
+              }}
+            >
+              {section === "kitchen" ? "🍽️ Kitchen" : "🥤 Drinks"}
+            </button>
+          ))}
+        </div>
         <div
           style={{ borderBottom: "1px solid var(--border-color)" }}
           className="p-3 flex items-center justify-between"
@@ -161,7 +209,7 @@ export default function MenuManagement() {
             Categories
           </span>
           <button
-            onClick={() => setShowCatForm(true)}
+            onClick={() => { setCatForm({ name: "", icon: "", section: activeSection }); setShowCatForm(true); }}
             style={{ color: "var(--accent-gold)", fontSize: "18px", lineHeight: 1 }}
             className="hover:opacity-80"
             title="Add category"
@@ -170,7 +218,7 @@ export default function MenuManagement() {
           </button>
         </div>
         <div className="flex-1 overflow-y-auto p-2 space-y-1">
-          {categories.map((cat) => (
+          {sectionCategories.map((cat) => (
             <div
               key={cat.id}
               onClick={() => setActiveCategory(cat.id)}
@@ -425,6 +473,14 @@ export default function MenuManagement() {
                 value={catForm.icon}
                 onChange={(e) => setCatForm((p) => ({ ...p, icon: e.target.value }))}
               />
+              <select
+                style={inputStyle}
+                value={catForm.section}
+                onChange={(e) => setCatForm((p) => ({ ...p, section: e.target.value as SectionType }))}
+              >
+                <option value="kitchen">🍽️ Kitchen</option>
+                <option value="drinks">🥤 Drinks</option>
+              </select>
             </div>
             <div className="flex gap-3">
               <button

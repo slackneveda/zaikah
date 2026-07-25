@@ -43,11 +43,47 @@ export async function PATCH(
       cashReceived,
       discount,
       tax,
+      tableId,
       items,
+      appendItems,
     } = body;
 
     const order = await prisma.$transaction(async (tx) => {
-      // If items are provided, update them
+      // appendItems: merge new items into existing order (add-more-items flow)
+      if (appendItems !== undefined && appendItems.length > 0) {
+        type IncomingItem = { menuItemId: number; name: string; price: number; quantity: number; notes?: string; departmentId?: number };
+        const existing = await tx.orderItem.findMany({ where: { orderId } });
+        for (const newItem of appendItems as IncomingItem[]) {
+          const match = existing.find((e) => e.menuItemId === newItem.menuItemId);
+          if (match) {
+            await tx.orderItem.update({
+              where: { id: match.id },
+              data: { quantity: match.quantity + newItem.quantity, subtotal: (match.quantity + newItem.quantity) * newItem.price },
+            });
+          } else {
+            await tx.orderItem.create({
+              data: {
+                orderId,
+                menuItemId: newItem.menuItemId,
+                name: newItem.name,
+                price: newItem.price,
+                quantity: newItem.quantity,
+                notes: newItem.notes || null,
+                departmentId: newItem.departmentId || null,
+                subtotal: newItem.price * newItem.quantity,
+              },
+            });
+          }
+        }
+        // Recalculate totals from all items
+        const allItems = await tx.orderItem.findMany({ where: { orderId } });
+        const subtotal = allItems.reduce((s, i) => s + i.price * i.quantity, 0);
+        const discountAmt = discount !== undefined ? parseFloat(discount) : 0;
+        const total = subtotal - discountAmt;
+        await tx.order.update({ where: { id: orderId }, data: { subtotal, discount: discountAmt, total } });
+      }
+
+      // items: full replace (legacy update flow)
       if (items !== undefined) {
         await tx.orderItem.deleteMany({ where: { orderId } });
         if (items.length > 0) {
@@ -97,6 +133,7 @@ export async function PATCH(
           ...(customerId !== undefined && { customerId: customerId || null }),
           ...(notes !== undefined && { notes }),
           ...(cashReceived !== undefined && { cashReceived: parseFloat(cashReceived) }),
+          ...(tableId !== undefined && tableId !== null && { tableId: parseInt(tableId) }),
         },
         include: {
           items: { include: { department: true } },

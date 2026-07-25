@@ -151,23 +151,27 @@ export default function AdminPage() {
 
   return (
     <AdminLoginGate>
-      {() => (
+      {(admin, logout, openChangePw) => (
         <div style={{ background: "var(--bg-primary)" }} className="flex flex-col h-screen">
           <Navbar title="Admin Panel" backHref="/">
-            <span
-              style={{
-                background: "rgba(232,163,61,0.15)",
-                color: "var(--accent-gold)",
-                border: "1px solid rgba(232,163,61,0.4)",
-                borderRadius: "20px",
-                padding: "3px 12px",
-                fontSize: "12px",
-                fontWeight: 700,
-                letterSpacing: "0.05em",
-              }}
-            >
-              ADMIN
-            </span>
+            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+              <div style={{ textAlign: "right" }}>
+                <p style={{ color: "var(--text-primary)", fontSize: "13px", fontWeight: 700, margin: 0, lineHeight: 1.2 }}>{admin.name}</p>
+                <p style={{ color: "var(--text-muted)", fontSize: "11px", margin: 0, lineHeight: 1.2 }}>{admin.email}</p>
+              </div>
+              <button
+                onClick={openChangePw}
+                style={{ background: "rgba(96,165,250,0.12)", color: "#60A5FA", border: "1px solid rgba(96,165,250,0.3)", borderRadius: "8px", padding: "5px 10px", fontSize: "12px", fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" }}
+              >
+                🔑 Change Password
+              </button>
+              <button
+                onClick={logout}
+                style={{ background: "rgba(239,68,68,0.1)", color: "var(--danger)", border: "1px solid rgba(239,68,68,0.3)", borderRadius: "8px", padding: "5px 10px", fontSize: "12px", fontWeight: 600, cursor: "pointer" }}
+              >
+                Logout
+              </button>
+            </div>
           </Navbar>
 
           {/* Tab Bar */}

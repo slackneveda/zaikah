@@ -12,7 +12,7 @@ interface TableOrder {
   orderNumber: string;
   status: string;
   total: number;
-  items: { id: number; name: string; quantity: number; price: number }[];
+  items: { id: number; name: string; quantity: number; price: number; department?: { id: number; name: string } | null }[];
   orderTaker?: { id: number; name: string } | null;
 }
 
@@ -39,7 +39,6 @@ export default function TakeawayPage() {
   const [existingOrder, setExistingOrder] = useState<TableOrder | null>(null);
   const [orderTakers, setOrderTakers] = useState<OrderTaker[]>([]);
   const [selectedOrderTaker, setSelectedOrderTaker] = useState<number | null>(null);
-  const [receiptVisible, setReceiptVisible] = useState(false);
   const [savedCarts, setSavedCarts] = useState<Record<number, CartItem[]>>({});
   const { setOrderType, setTable, clearCart, loadOrder, items: cartItems } = useOrderStore();
 
@@ -62,14 +61,13 @@ export default function TakeawayPage() {
   }, [fetchSlots, setOrderType]);
 
   const handleSelectSlot = async (slot: TakeawaySlot) => {
-    setReceiptVisible(false);
     setOrderType("takeaway");
     setTable(slot.id, slot.name);
 
     if (slot.status === "occupied" && slot.orders && slot.orders.length > 0) {
       const order = slot.orders[0];
       setExistingOrder(order);
-      loadOrder(order.items.map((i) => ({ id: i.id, menuItemId: i.id, name: i.name, price: i.price, quantity: i.quantity })));
+      loadOrder(order.items.map((i) => ({ id: i.id, menuItemId: i.id, name: i.name, price: i.price, quantity: i.quantity, departmentId: i.department?.id, departmentName: i.department?.name })));
       setSelectedOrderTaker(order.orderTaker?.id ?? null);
     } else {
       setExistingOrder(null);
@@ -80,6 +78,8 @@ export default function TakeawayPage() {
         loadOrder(saved);
       } else {
         clearCart();
+        // Re-apply slot after clearCart (clearCart resets tableName to null)
+        setTable(slot.id, slot.name);
         // Mark as occupied only on first entry
         await fetch(`/api/tables/${slot.id}`, {
           method: "PATCH",
@@ -93,7 +93,6 @@ export default function TakeawayPage() {
   };
 
   const handleOrderComplete = () => {
-    setReceiptVisible(false);
     if (selectedSlot) {
       setSavedCarts((prev) => { const next = { ...prev }; delete next[selectedSlot.id]; return next; });
     }
@@ -102,16 +101,36 @@ export default function TakeawayPage() {
     fetchSlots();
   };
 
-  // Back button: if receipt is visible treat as complete; otherwise save cart and go back
-  const handleReleaseSlot = () => {
-    if (receiptVisible) {
-      handleOrderComplete();
-      return;
+  // Called when customer wants to add more items after an order is placed
+  const handleAddMoreItems = (orderId: number, orderNumber: string) => {
+    setExistingOrder({ id: orderId, orderNumber, status: "completed", total: 0, items: [] });
+    // Re-apply the slot so tableName is preserved in the store after clearCart
+    if (selectedSlot) {
+      setTable(selectedSlot.id, selectedSlot.name);
     }
-    // Save current unsaved cart items so they are restored when re-entering this slot
-    if (selectedSlot && !existingOrder && cartItems.length > 0) {
-      setSavedCarts((prev) => ({ ...prev, [selectedSlot.id]: cartItems }));
+  };
+
+  // Back: save cart state and return to slot list WITHOUT releasing the slot
+  const handleBackSlot = () => {
+    if (selectedSlot && cartItems.length > 0 && !existingOrder) {
+      setSavedCarts((prev) => ({ ...prev, [selectedSlot.id]: [...cartItems] }));
     }
+    setSelectedSlot(null);
+    setExistingOrder(null);
+    fetchSlots();
+  };
+
+  // Release Slot: marks slot available, clears everything, goes back to slot selector
+  const handleReleaseSlot = async () => {
+    if (selectedSlot) {
+      setSavedCarts((prev) => { const next = { ...prev }; delete next[selectedSlot.id]; return next; });
+      await fetch(`/api/tables/${selectedSlot.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "available", activeOrderId: null }),
+      }).catch(() => {});
+    }
+    clearCart();
     setSelectedSlot(null);
     setExistingOrder(null);
     fetchSlots();
@@ -141,7 +160,7 @@ export default function TakeawayPage() {
   if (selectedSlot) {
     return (
       <div style={{ background: "var(--bg-primary)" }} className="flex flex-col h-screen">
-        <Navbar title="Takeaway Order" onBack={handleReleaseSlot}>
+        <Navbar title="Takeaway Order" onBack={handleBackSlot}>
           <span style={{ background: "rgba(122,31,43,0.15)", color: "var(--accent-maroon-light)", border: "1px solid var(--accent-maroon)", borderRadius: "20px", padding: "3px 10px", fontSize: "12px", fontWeight: 700 }}>
             🥡 {selectedSlot.name}
           </span>
@@ -171,7 +190,7 @@ export default function TakeawayPage() {
           <div className="w-72 xl:w-80 shrink-0">
             <OrderPanel
               onOrderComplete={handleOrderComplete}
-              onOrderPlaced={() => setReceiptVisible(true)}
+              onAddMoreItems={handleAddMoreItems}
               orderTakerId={selectedOrderTaker}
               existingOrderId={existingOrder?.id}
             />
@@ -181,8 +200,13 @@ export default function TakeawayPage() {
     );
   }
 
-  const occupied = slots.filter((s) => s.status === "occupied");
-  const available = slots.filter((s) => s.status !== "occupied");
+  const sortedSlots = [...slots].sort((a, b) => {
+    const numA = parseInt(a.name.replace(/\D/g, ""), 10);
+    const numB = parseInt(b.name.replace(/\D/g, ""), 10);
+    return (isNaN(numA) ? 0 : numA) - (isNaN(numB) ? 0 : numB);
+  });
+  const occupied = sortedSlots.filter((s) => s.status === "occupied");
+  const available = sortedSlots.filter((s) => s.status !== "occupied");
 
   return (
     <div style={{ background: "var(--bg-primary)" }} className="flex flex-col h-screen">
@@ -206,7 +230,7 @@ export default function TakeawayPage() {
           </div>
         ) : (
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: "14px" }}>
-            {slots.map((slot) => {
+            {sortedSlots.map((slot) => {
               const isOccupied = slot.status === "occupied";
               const activeOrder = slot.orders?.[0];
               return (

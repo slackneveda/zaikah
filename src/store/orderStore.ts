@@ -7,6 +7,7 @@ export interface CartItem {
   quantity: number;
   notes?: string;
   departmentId?: number;
+  departmentName?: string;
 }
 
 type OrderType = "takeaway" | "dine-in" | "delivery";
@@ -91,7 +92,8 @@ export const useOrderStore = create<OrderState>((set, get) => ({
 
   getTotal: () => {
     const { discount } = get();
-    return Math.max(0, get().getSubtotal() - discount);
+    const subtotal = get().getSubtotal();
+    return Math.max(0, subtotal - (subtotal * Math.min(100, Math.max(0, discount)) / 100));
   },
 
   getChange: () => {

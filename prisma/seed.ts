@@ -15,21 +15,49 @@ async function main() {
   await prisma.menuItem.deleteMany({});
   await prisma.category.deleteMany({});
 
-  // Categories from new menu
-  const categories = [
-    { name: "Salad", icon: "🥗", sortOrder: 1 },
-    { name: "Pakistani Karahi", icon: "🍲", sortOrder: 2 },
-    { name: "Chicken Boneless Handi", icon: "🫕", sortOrder: 3 },
-    { name: "Mutton Boneless Handi", icon: "🫕", sortOrder: 4 },
-    { name: "Zaikah Special Chinese", icon: "🥢", sortOrder: 5 },
-    { name: "Zaika Special BBQ", icon: "🔥", sortOrder: 6 },
-    { name: "Fast Food", icon: "🍔", sortOrder: 7 },
-    { name: "Sea Food", icon: "🐟", sortOrder: 8 },
-    { name: "Sajji", icon: "🍗", sortOrder: 9 },
-    { name: "Zaikah Rice", icon: "🍚", sortOrder: 10 },
+  // Ensure Departments exist first so we can link categories
+  const departments = [
+    { name: "Kitchen", color: "#ef4444" },
+    { name: "Bar", color: "#3b82f6" },
+    { name: "Dessert", color: "#ec4899" },
+    { name: "Drinks", color: "#22c55e" },
+    { name: "BBQ", color: "#f97316" },
+  ];
+  for (const dept of departments) {
+    await prisma.department.upsert({
+      where: { name: dept.name },
+      update: {},
+      create: dept,
+    });
+  }
+
+  const kitchenDept = await prisma.department.findUnique({ where: { name: "Kitchen" } });
+  const drinksDept = await prisma.department.findUnique({ where: { name: "Drinks" } });
+
+  // Kitchen categories — all existing food categories
+  const kitchenCategories = [
+    { name: "Salad", icon: "🥗", sortOrder: 1, departmentId: kitchenDept!.id },
+    { name: "Pakistani Karahi", icon: "🍲", sortOrder: 2, departmentId: kitchenDept!.id },
+    { name: "Chicken Boneless Handi", icon: "🫕", sortOrder: 3, departmentId: kitchenDept!.id },
+    { name: "Mutton Boneless Handi", icon: "🫕", sortOrder: 4, departmentId: kitchenDept!.id },
+    { name: "Zaikah Special Chinese", icon: "🥢", sortOrder: 5, departmentId: kitchenDept!.id },
+    { name: "Zaika Special BBQ", icon: "🔥", sortOrder: 6, departmentId: kitchenDept!.id },
+    { name: "Fast Food", icon: "🍔", sortOrder: 7, departmentId: kitchenDept!.id },
+    { name: "Sea Food", icon: "🐟", sortOrder: 8, departmentId: kitchenDept!.id },
+    { name: "Sajji", icon: "🍗", sortOrder: 9, departmentId: kitchenDept!.id },
+    { name: "Zaikah Rice", icon: "🍚", sortOrder: 10, departmentId: kitchenDept!.id },
   ];
 
-  for (const cat of categories) {
+  // Drinks categories
+  const drinksCategories = [
+    { name: "Cold Drinks", icon: "🥤", sortOrder: 1, departmentId: drinksDept!.id },
+    { name: "Hot Drinks", icon: "☕", sortOrder: 2, departmentId: drinksDept!.id },
+    { name: "Fresh Juices", icon: "🍹", sortOrder: 3, departmentId: drinksDept!.id },
+    { name: "Shakes & Smoothies", icon: "🥛", sortOrder: 4, departmentId: drinksDept!.id },
+    { name: "Water & Minerals", icon: "💧", sortOrder: 5, departmentId: drinksDept!.id },
+  ];
+
+  for (const cat of [...kitchenCategories, ...drinksCategories]) {
     await prisma.category.upsert({
       where: { name: cat.name },
       update: cat,
@@ -47,6 +75,11 @@ async function main() {
   const seafoodCat = await prisma.category.findUnique({ where: { name: "Sea Food" } });
   const sajjiCat = await prisma.category.findUnique({ where: { name: "Sajji" } });
   const riceCat = await prisma.category.findUnique({ where: { name: "Zaikah Rice" } });
+  const coldDrinksCat = await prisma.category.findUnique({ where: { name: "Cold Drinks" } });
+  const hotDrinksCat = await prisma.category.findUnique({ where: { name: "Hot Drinks" } });
+  const juicesCat = await prisma.category.findUnique({ where: { name: "Fresh Juices" } });
+  const shakesCat = await prisma.category.findUnique({ where: { name: "Shakes & Smoothies" } });
+  const waterCat = await prisma.category.findUnique({ where: { name: "Water & Minerals" } });
 
   const menuItems = [
     // Salad
@@ -110,6 +143,46 @@ async function main() {
     { name: "Vegetable Fried Rice", price: 1000, categoryId: riceCat!.id },
     { name: "Chicken Biryani", price: 300, categoryId: riceCat!.id },
     { name: "Sada Biryani Rice", price: 200, categoryId: riceCat!.id },
+    // Cold Drinks
+    { name: "Pepsi (250ml)", price: 80, categoryId: coldDrinksCat!.id },
+    { name: "Pepsi (500ml)", price: 120, categoryId: coldDrinksCat!.id },
+    { name: "7Up (250ml)", price: 80, categoryId: coldDrinksCat!.id },
+    { name: "7Up (500ml)", price: 120, categoryId: coldDrinksCat!.id },
+    { name: "Mirinda (250ml)", price: 80, categoryId: coldDrinksCat!.id },
+    { name: "Mountain Dew (250ml)", price: 80, categoryId: coldDrinksCat!.id },
+    { name: "Mountain Dew (500ml)", price: 120, categoryId: coldDrinksCat!.id },
+    { name: "Coca Cola (250ml)", price: 80, categoryId: coldDrinksCat!.id },
+    { name: "Coca Cola (500ml)", price: 120, categoryId: coldDrinksCat!.id },
+    { name: "Sprite (250ml)", price: 80, categoryId: coldDrinksCat!.id },
+    // Hot Drinks
+    { name: "Tea", price: 80, categoryId: hotDrinksCat!.id },
+    { name: "Kashmiri Tea", price: 150, categoryId: hotDrinksCat!.id },
+    { name: "Green Tea", price: 100, categoryId: hotDrinksCat!.id },
+    { name: "Coffee (Black)", price: 150, categoryId: hotDrinksCat!.id },
+    { name: "Cappuccino", price: 250, categoryId: hotDrinksCat!.id },
+    { name: "Latte", price: 280, categoryId: hotDrinksCat!.id },
+    { name: "Doodh Pati", price: 100, categoryId: hotDrinksCat!.id },
+    // Fresh Juices
+    { name: "Orange Juice", price: 200, categoryId: juicesCat!.id },
+    { name: "Mango Juice", price: 200, categoryId: juicesCat!.id },
+    { name: "Apple Juice", price: 200, categoryId: juicesCat!.id },
+    { name: "Watermelon Juice", price: 180, categoryId: juicesCat!.id },
+    { name: "Mix Fruit Juice", price: 250, categoryId: juicesCat!.id },
+    { name: "Lemonade", price: 150, categoryId: juicesCat!.id },
+    { name: "Sugarcane Juice", price: 100, categoryId: juicesCat!.id },
+    // Shakes & Smoothies
+    { name: "Mango Shake", price: 300, categoryId: shakesCat!.id },
+    { name: "Banana Shake", price: 280, categoryId: shakesCat!.id },
+    { name: "Strawberry Shake", price: 320, categoryId: shakesCat!.id },
+    { name: "Chocolate Shake", price: 350, categoryId: shakesCat!.id },
+    { name: "Oreo Shake", price: 380, categoryId: shakesCat!.id },
+    { name: "Mix Fruit Shake", price: 350, categoryId: shakesCat!.id },
+    { name: "Lassi (Sweet)", price: 200, categoryId: shakesCat!.id },
+    { name: "Lassi (Salted)", price: 200, categoryId: shakesCat!.id },
+    // Water & Minerals
+    { name: "Mineral Water (500ml)", price: 60, categoryId: waterCat!.id },
+    { name: "Mineral Water (1.5L)", price: 100, categoryId: waterCat!.id },
+    { name: "Soda Water", price: 80, categoryId: waterCat!.id },
   ];
 
   for (const item of menuItems) {
@@ -130,22 +203,6 @@ async function main() {
       where: { name: `T${i}` },
       update: {},
       create: { name: `T${i}`, tableType: "takeaway", seats: 2 },
-    });
-  }
-
-  // Departments
-  const departments = [
-    { name: "Kitchen", color: "#ef4444" },
-    { name: "Bar", color: "#3b82f6" },
-    { name: "Dessert", color: "#ec4899" },
-    { name: "Drinks", color: "#22c55e" },
-    { name: "BBQ", color: "#f97316" },
-  ];
-  for (const dept of departments) {
-    await prisma.department.upsert({
-      where: { name: dept.name },
-      update: {},
-      create: dept,
     });
   }
 

@@ -12,7 +12,7 @@ interface TableOrder {
   orderNumber: string;
   status: string;
   total: number;
-  items: { id: number; name: string; quantity: number; price: number }[];
+  items: { id: number; name: string; quantity: number; price: number; department?: { id: number; name: string } | null }[];
   orderTaker?: { id: number; name: string } | null;
 }
 
@@ -75,7 +75,6 @@ export default function DineInPage() {
   const [transferTarget, setTransferTarget] = useState<Table | null>(null);
   const [transferring, setTransferring] = useState(false);
   const [existingOrder, setExistingOrder] = useState<TableOrder | null>(null);
-  const [receiptVisible, setReceiptVisible] = useState(false);
   const [savedCarts, setSavedCarts] = useState<Record<number, CartItem[]>>({});
   const { setOrderType, setTable, clearCart, loadOrder, items: cartItems } = useOrderStore();
 
@@ -98,7 +97,6 @@ export default function DineInPage() {
   }, [fetchTables, setOrderType]);
 
   const handleSelectTable = async (table: Table) => {
-    setReceiptVisible(false);
     setOrderType("dine-in");
     setTable(table.id, table.name);
 
@@ -106,7 +104,7 @@ export default function DineInPage() {
       // Reopen existing saved order from DB
       const order = table.orders[0];
       setExistingOrder(order);
-      loadOrder(order.items.map((i) => ({ id: i.id, menuItemId: i.id, name: i.name, price: i.price, quantity: i.quantity })));
+      loadOrder(order.items.map((i) => ({ id: i.id, menuItemId: i.id, name: i.name, price: i.price, quantity: i.quantity, departmentId: i.department?.id, departmentName: i.department?.name })));
       setSelectedOrderTaker(order.orderTaker?.id ?? null);
     } else {
       setExistingOrder(null);
@@ -117,6 +115,8 @@ export default function DineInPage() {
         loadOrder(saved);
       } else {
         clearCart();
+        // Re-apply table after clearCart (clearCart resets tableName to null)
+        setTable(table.id, table.name);
         // Mark as occupied only on first entry
         await fetch(`/api/tables/${table.id}`, {
           method: "PATCH",
@@ -130,7 +130,6 @@ export default function DineInPage() {
   };
 
   const handleOrderComplete = () => {
-    setReceiptVisible(false);
     if (selectedTable) {
       setSavedCarts((prev) => { const next = { ...prev }; delete next[selectedTable.id]; return next; });
     }
@@ -139,16 +138,28 @@ export default function DineInPage() {
     fetchTables();
   };
 
-  // Back button: if receipt is visible, treat as order complete; otherwise save cart and go back
-  const handleReleaseTable = () => {
-    if (receiptVisible) {
-      handleOrderComplete();
-      return;
+  // Called when customer wants to add more items after an order is placed
+  const handleAddMoreItems = (orderId: number, orderNumber: string) => {
+    // Set the just-placed order as the existing order so new items are appended via PATCH
+    setExistingOrder({ id: orderId, orderNumber, status: "completed", total: 0, items: [] });
+    // Re-apply the table so tableName is preserved in the store after clearCart
+    if (selectedTable) {
+      setTable(selectedTable.id, selectedTable.name);
     }
-    // Save current unsaved cart items so they are restored when re-entering this table
-    if (selectedTable && !existingOrder && cartItems.length > 0) {
-      setSavedCarts((prev) => ({ ...prev, [selectedTable.id]: cartItems }));
+  };
+
+  // Release Table: marks table available, clears everything, goes back to table list
+  const handleReleaseTable = async () => {
+    if (selectedTable) {
+      setSavedCarts((prev) => { const next = { ...prev }; delete next[selectedTable.id]; return next; });
+      // Mark table as available and clear active order
+      await fetch(`/api/tables/${selectedTable.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "available", activeOrderId: null }),
+      }).catch(() => {});
     }
+    clearCart();
     setSelectedTable(null);
     setExistingOrder(null);
     fetchTables();
@@ -250,7 +261,7 @@ export default function DineInPage() {
           <div className="w-72 xl:w-80 shrink-0">
             <OrderPanel
               onOrderComplete={handleOrderComplete}
-              onOrderPlaced={() => setReceiptVisible(true)}
+              onAddMoreItems={handleAddMoreItems}
               orderTakerId={selectedOrderTaker}
               existingOrderId={existingOrder?.id}
             />

@@ -85,6 +85,9 @@ export default function DeliveryPage() {
   const [selectedOrderTaker, setSelectedOrderTaker] = useState<number | null>(null);
   const [lookingUp, setLookingUp] = useState(false);
 
+  // Existing order for add-more-items flow
+  const [existingDeliveryOrderId, setExistingDeliveryOrderId] = useState<number | null>(null);
+
   // Assign rider modal
   const [assignOrderId, setAssignOrderId] = useState<number | null>(null);
   const [assignRiderId, setAssignRiderId] = useState<number | null>(null);
@@ -140,7 +143,11 @@ export default function DeliveryPage() {
 
   const handleStartOrder = useCallback(() => {
     clearCart();
+    setExistingDeliveryOrderId(null);
     setView("new-order");
+  }, [clearCart]);  const handleAddMoreItems = useCallback((orderId: number) => {
+    setExistingDeliveryOrderId(orderId);
+    clearCart();
   }, [clearCart]);
 
   const handleOrderComplete = useCallback(async (orderId: number) => {
@@ -162,10 +169,9 @@ export default function DeliveryPage() {
         }).catch(() => {});
       }
     }
-    // Change order status to preparing (it was placed as completed - but delivery starts as "pending" or "preparing")
-    // Actually we want it to be "pending" for tracking — the POST route handles status
     void orderId;
     clearCart();
+    setExistingDeliveryOrderId(null);
     setView("list");
     await fetchOrders();
   }, [phone, custName, custAddress, customer, clearCart, fetchOrders]);
@@ -269,7 +275,9 @@ export default function DeliveryPage() {
             </div>
             <OrderPanel
               onOrderComplete={handleOrderComplete}
+              onAddMoreItems={handleAddMoreItems}
               orderTakerId={selectedOrderTaker}
+              existingOrderId={existingDeliveryOrderId ?? undefined}
               riderId={selectedRider}
               customerId={customer?.id}
               customerName={custName || undefined}
