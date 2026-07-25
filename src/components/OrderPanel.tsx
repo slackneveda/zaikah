@@ -6,6 +6,7 @@ import PrintReceipt from "./PrintReceipt";
 
 interface OrderPanelProps {
   onOrderComplete?: (orderId: number, orderNumber: string) => void;
+  onOrderPlaced?: () => void;
   orderTakerId?: number | null;
   existingOrderId?: number;
   customerId?: number | null;
@@ -18,6 +19,7 @@ interface OrderPanelProps {
 
 export default function OrderPanel({
   onOrderComplete,
+  onOrderPlaced,
   orderTakerId,
   existingOrderId,
   customerId,
@@ -118,21 +120,23 @@ export default function OrderPanel({
       }
       const order = await res.json();
       setCompletedOrder({ id: order.id, orderNumber: order.orderNumber });
-      onOrderComplete?.(order.id, order.orderNumber);
+      onOrderPlaced?.();
     } catch (err) {
       console.error(err);
       alert(err instanceof Error ? err.message : "Failed to complete order");
     } finally {
       setLoading(false);
     }
-  }, [items, loading, orderType, tableId, cashReceived, total, discount, orderTakerId, customerId, riderId, customerPhone, customerName, customerAddress, notes, deliveryNotes, existingOrderId, onOrderComplete]);
+  }, [items, loading, orderType, tableId, cashReceived, total, discount, orderTakerId, customerId, riderId, customerPhone, customerName, customerAddress, notes, deliveryNotes, existingOrderId]);
 
   const handleNewOrder = useCallback(() => {
+    const finished = completedOrder;
     clearCart();
     setCompletedOrder(null);
     setCashInput("");
     setDiscountInput("");
-  }, [clearCart]);
+    if (finished) onOrderComplete?.(finished.id, finished.orderNumber);
+  }, [clearCart, completedOrder, onOrderComplete]);
 
   if (completedOrder) {
     return (

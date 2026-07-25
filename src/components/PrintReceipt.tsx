@@ -52,8 +52,8 @@ export default function PrintReceipt({
       style={{
         fontFamily: "monospace",
         fontSize: "12px",
-        width: "80mm",
-        padding: "8mm",
+        width: "76mm",
+        padding: "4mm 5mm",
         background: "#fff",
         color: "#000",
         lineHeight: "1.6",

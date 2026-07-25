@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import Navbar from "@/components/Navbar";
 import MenuGrid from "@/components/MenuGrid";
 import OrderPanel from "@/components/OrderPanel";
-import { useOrderStore } from "@/store/orderStore";
+import { useOrderStore, type CartItem } from "@/store/orderStore";
 import { useAuthGuard } from "@/lib/useAuthGuard";
 
 interface TableOrder {
@@ -75,7 +75,9 @@ export default function DineInPage() {
   const [transferTarget, setTransferTarget] = useState<Table | null>(null);
   const [transferring, setTransferring] = useState(false);
   const [existingOrder, setExistingOrder] = useState<TableOrder | null>(null);
-  const { setOrderType, setTable, clearCart, loadOrder } = useOrderStore();
+  const [receiptVisible, setReceiptVisible] = useState(false);
+  const [savedCarts, setSavedCarts] = useState<Record<number, CartItem[]>>({});
+  const { setOrderType, setTable, clearCart, loadOrder, items: cartItems } = useOrderStore();
 
   const fetchTables = useCallback(async () => {
     try {
@@ -96,48 +98,80 @@ export default function DineInPage() {
   }, [fetchTables, setOrderType]);
 
   const handleSelectTable = async (table: Table) => {
+    setReceiptVisible(false);
     setOrderType("dine-in");
     setTable(table.id, table.name);
 
     if (table.status === "occupied" && table.orders && table.orders.length > 0) {
-      // Reopen existing order
+      // Reopen existing saved order from DB
       const order = table.orders[0];
       setExistingOrder(order);
       loadOrder(order.items.map((i) => ({ id: i.id, menuItemId: i.id, name: i.name, price: i.price, quantity: i.quantity })));
       setSelectedOrderTaker(order.orderTaker?.id ?? null);
     } else {
-      clearCart();
       setExistingOrder(null);
       setSelectedOrderTaker(null);
-      // Mark as occupied
-      await fetch(`/api/tables/${table.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: "occupied" }),
-      });
-      setTables((prev) => prev.map((t) => t.id === table.id ? { ...t, status: "occupied" } : t));
+      // Restore unsaved cart items if user previously backed out of this table
+      const saved = savedCarts[table.id];
+      if (saved && saved.length > 0) {
+        loadOrder(saved);
+      } else {
+        clearCart();
+        // Mark as occupied only on first entry
+        await fetch(`/api/tables/${table.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ status: "occupied" }),
+        });
+        setTables((prev) => prev.map((t) => t.id === table.id ? { ...t, status: "occupied" } : t));
+      }
     }
     setSelectedTable({ ...table });
   };
 
   const handleOrderComplete = () => {
+    setReceiptVisible(false);
+    if (selectedTable) {
+      setSavedCarts((prev) => { const next = { ...prev }; delete next[selectedTable.id]; return next; });
+    }
     setSelectedTable(null);
     setExistingOrder(null);
     fetchTables();
   };
 
-  const handleReleaseTable = async () => {
-    if (!selectedTable) return;
-    if (selectedTable.status === "occupied" && !existingOrder) {
-      await fetch(`/api/tables/${selectedTable.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: "available", activeOrderId: null }),
-      });
+  // Back button: if receipt is visible, treat as order complete; otherwise save cart and go back
+  const handleReleaseTable = () => {
+    if (receiptVisible) {
+      handleOrderComplete();
+      return;
     }
-    clearCart();
+    // Save current unsaved cart items so they are restored when re-entering this table
+    if (selectedTable && !existingOrder && cartItems.length > 0) {
+      setSavedCarts((prev) => ({ ...prev, [selectedTable.id]: cartItems }));
+    }
     setSelectedTable(null);
     setExistingOrder(null);
+    fetchTables();
+  };
+
+  // Manual reset: mark table available and cancel active order
+  const handleResetTable = async (table: Table, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!confirm(`Reset ${table.name}? This will cancel the active order and free the table.`)) return;
+    if (table.activeOrderId) {
+      await fetch(`/api/orders/${table.activeOrderId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "cancelled" }),
+      }).catch(() => {});
+    }
+    await fetch(`/api/tables/${table.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: "available", activeOrderId: null }),
+    });
+    setSavedCarts((prev) => { const next = { ...prev }; delete next[table.id]; return next; });
+    clearCart();
     fetchTables();
   };
 
@@ -216,6 +250,7 @@ export default function DineInPage() {
           <div className="w-72 xl:w-80 shrink-0">
             <OrderPanel
               onOrderComplete={handleOrderComplete}
+              onOrderPlaced={() => setReceiptVisible(true)}
               orderTakerId={selectedOrderTaker}
               existingOrderId={existingOrder?.id}
             />
@@ -269,42 +304,71 @@ export default function DineInPage() {
               const isOccupied = table.status === "occupied";
               const activeOrder = table.orders?.[0];
               return (
-                <button
+                <div
                   key={table.id}
-                  onClick={() => handleSelectTable(table)}
                   style={{
                     background: isOccupied ? "rgba(239,68,68,0.08)" : "var(--bg-card)",
                     border: isOccupied ? "2px solid rgba(239,68,68,0.5)" : "2px solid var(--border-color)",
                     borderRadius: "12px",
-                    padding: "18px 12px 14px",
                     display: "flex",
                     flexDirection: "column",
                     alignItems: "center",
-                    gap: "6px",
-                    cursor: "pointer",
+                    overflow: "hidden",
                     transition: "all 0.15s ease",
-                    textAlign: "center",
                   }}
-                  onMouseEnter={(e) => { e.currentTarget.style.transform = "translateY(-2px)"; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.transform = "translateY(0)"; }}
                 >
-                  <span style={{ fontSize: "20px" }}>{isOccupied ? "🔴" : "🟢"}</span>
-                  <span style={{ color: "var(--text-primary)", fontWeight: 700, fontSize: "17px" }}>{table.name}</span>
-                  <span style={{ fontSize: "11px", color: isOccupied ? "var(--danger)" : "var(--success)", fontWeight: 600 }}>
-                    {isOccupied ? "Occupied" : "Available"}
-                  </span>
-                  {isOccupied && activeOrder && (
-                    <span style={{ fontSize: "10px", color: "var(--text-muted)" }}>
-                      {activeOrder.items.length} item{activeOrder.items.length !== 1 ? "s" : ""}
+                  <button
+                    onClick={() => handleSelectTable(table)}
+                    style={{
+                      width: "100%",
+                      background: "none",
+                      border: "none",
+                      padding: "18px 12px 12px",
+                      display: "flex",
+                      flexDirection: "column",
+                      alignItems: "center",
+                      gap: "6px",
+                      cursor: "pointer",
+                      textAlign: "center",
+                    }}
+                  >
+                    <span style={{ fontSize: "20px" }}>{isOccupied ? "🔴" : "🟢"}</span>
+                    <span style={{ color: "var(--text-primary)", fontWeight: 700, fontSize: "17px" }}>{table.name}</span>
+                    <span style={{ fontSize: "11px", color: isOccupied ? "var(--danger)" : "var(--success)", fontWeight: 600 }}>
+                      {isOccupied ? "Occupied" : "Available"}
                     </span>
-                  )}
-                  <span style={{ fontSize: "10px", color: "var(--text-muted)" }}>{table.seats} seats</span>
+                    {isOccupied && activeOrder && (
+                      <span style={{ fontSize: "10px", color: "var(--text-muted)" }}>
+                        {activeOrder.items.length} item{activeOrder.items.length !== 1 ? "s" : ""}
+                      </span>
+                    )}
+                    <span style={{ fontSize: "10px", color: "var(--text-muted)" }}>{table.seats} seats</span>
+                    {isOccupied && (
+                      <span style={{ fontSize: "10px", color: "var(--accent-gold)", fontWeight: 600, marginTop: "2px" }}>
+                        Tap to reopen →
+                      </span>
+                    )}
+                  </button>
                   {isOccupied && (
-                    <span style={{ fontSize: "10px", color: "var(--accent-gold)", fontWeight: 600, marginTop: "2px" }}>
-                      Tap to reopen →
-                    </span>
+                    <button
+                      onClick={(e) => handleResetTable(table, e)}
+                      style={{
+                        width: "100%",
+                        background: "rgba(239,68,68,0.15)",
+                        border: "none",
+                        borderTop: "1px solid rgba(239,68,68,0.3)",
+                        color: "var(--danger)",
+                        fontSize: "11px",
+                        fontWeight: 600,
+                        padding: "6px",
+                        cursor: "pointer",
+                        letterSpacing: "0.3px",
+                      }}
+                    >
+                      ✕ Reset Table
+                    </button>
                   )}
-                </button>
+                </div>
               );
             })}
           </div>

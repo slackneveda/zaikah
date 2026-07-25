@@ -66,7 +66,18 @@ main {
 }
 
 /* Print styles */
+@page {
+  size: 76mm auto;
+  margin: 0;
+}
+
 @media print {
+  html, body {
+    width: 76mm;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: white !important;
+  }
   body * {
     visibility: hidden;
   }
@@ -78,8 +89,9 @@ main {
     position: fixed;
     left: 0;
     top: 0;
-    width: 80mm;
-    max-width: 80mm;
+    width: 76mm;
+    margin: 0 !important;
+    padding: 4mm 5mm !important;
     background: white !important;
     color: black !important;
     box-shadow: none !important;

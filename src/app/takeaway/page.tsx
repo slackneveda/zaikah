@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import Navbar from "@/components/Navbar";
 import MenuGrid from "@/components/MenuGrid";
 import OrderPanel from "@/components/OrderPanel";
-import { useOrderStore } from "@/store/orderStore";
+import { useOrderStore, type CartItem } from "@/store/orderStore";
 import { useAuthGuard } from "@/lib/useAuthGuard";
 
 interface TableOrder {
@@ -39,7 +39,9 @@ export default function TakeawayPage() {
   const [existingOrder, setExistingOrder] = useState<TableOrder | null>(null);
   const [orderTakers, setOrderTakers] = useState<OrderTaker[]>([]);
   const [selectedOrderTaker, setSelectedOrderTaker] = useState<number | null>(null);
-  const { setOrderType, setTable, clearCart, loadOrder } = useOrderStore();
+  const [receiptVisible, setReceiptVisible] = useState(false);
+  const [savedCarts, setSavedCarts] = useState<Record<number, CartItem[]>>({});
+  const { setOrderType, setTable, clearCart, loadOrder, items: cartItems } = useOrderStore();
 
   const fetchSlots = useCallback(async () => {
     try {
@@ -60,6 +62,7 @@ export default function TakeawayPage() {
   }, [fetchSlots, setOrderType]);
 
   const handleSelectSlot = async (slot: TakeawaySlot) => {
+    setReceiptVisible(false);
     setOrderType("takeaway");
     setTable(slot.id, slot.name);
 
@@ -69,37 +72,69 @@ export default function TakeawayPage() {
       loadOrder(order.items.map((i) => ({ id: i.id, menuItemId: i.id, name: i.name, price: i.price, quantity: i.quantity })));
       setSelectedOrderTaker(order.orderTaker?.id ?? null);
     } else {
-      clearCart();
       setExistingOrder(null);
       setSelectedOrderTaker(null);
-      await fetch(`/api/tables/${slot.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: "occupied" }),
-      });
-      setSlots((prev) => prev.map((s) => s.id === slot.id ? { ...s, status: "occupied" } : s));
+      // Restore unsaved cart items if user previously backed out of this slot
+      const saved = savedCarts[slot.id];
+      if (saved && saved.length > 0) {
+        loadOrder(saved);
+      } else {
+        clearCart();
+        // Mark as occupied only on first entry
+        await fetch(`/api/tables/${slot.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ status: "occupied" }),
+        });
+        setSlots((prev) => prev.map((s) => s.id === slot.id ? { ...s, status: "occupied" } : s));
+      }
     }
     setSelectedSlot({ ...slot });
   };
 
   const handleOrderComplete = () => {
+    setReceiptVisible(false);
+    if (selectedSlot) {
+      setSavedCarts((prev) => { const next = { ...prev }; delete next[selectedSlot.id]; return next; });
+    }
     setSelectedSlot(null);
     setExistingOrder(null);
     fetchSlots();
   };
 
-  const handleReleaseSlot = async () => {
-    if (!selectedSlot) return;
-    if (selectedSlot.status === "occupied" && !existingOrder) {
-      await fetch(`/api/tables/${selectedSlot.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: "available", activeOrderId: null }),
-      });
+  // Back button: if receipt is visible treat as complete; otherwise save cart and go back
+  const handleReleaseSlot = () => {
+    if (receiptVisible) {
+      handleOrderComplete();
+      return;
     }
-    clearCart();
+    // Save current unsaved cart items so they are restored when re-entering this slot
+    if (selectedSlot && !existingOrder && cartItems.length > 0) {
+      setSavedCarts((prev) => ({ ...prev, [selectedSlot.id]: cartItems }));
+    }
     setSelectedSlot(null);
     setExistingOrder(null);
+    fetchSlots();
+  };
+
+  // Manual reset: mark slot available and cancel active order
+  const handleResetSlot = async (slot: TakeawaySlot, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!confirm(`Reset ${slot.name}? This will cancel the active order and free the slot.`)) return;
+    if (slot.activeOrderId) {
+      await fetch(`/api/orders/${slot.activeOrderId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "cancelled" }),
+      }).catch(() => {});
+    }
+    await fetch(`/api/tables/${slot.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: "available", activeOrderId: null }),
+    });
+    setSavedCarts((prev) => { const next = { ...prev }; delete next[slot.id]; return next; });
+    clearCart();
     fetchSlots();
   };
 
@@ -136,6 +171,7 @@ export default function TakeawayPage() {
           <div className="w-72 xl:w-80 shrink-0">
             <OrderPanel
               onOrderComplete={handleOrderComplete}
+              onOrderPlaced={() => setReceiptVisible(true)}
               orderTakerId={selectedOrderTaker}
               existingOrderId={existingOrder?.id}
             />
@@ -174,41 +210,70 @@ export default function TakeawayPage() {
               const isOccupied = slot.status === "occupied";
               const activeOrder = slot.orders?.[0];
               return (
-                <button
+                <div
                   key={slot.id}
-                  onClick={() => handleSelectSlot(slot)}
                   style={{
                     background: isOccupied ? "rgba(239,68,68,0.08)" : "var(--bg-card)",
                     border: isOccupied ? "2px solid rgba(239,68,68,0.5)" : "2px solid var(--border-color)",
                     borderRadius: "12px",
-                    padding: "18px 12px 14px",
                     display: "flex",
                     flexDirection: "column",
                     alignItems: "center",
-                    gap: "6px",
-                    cursor: "pointer",
+                    overflow: "hidden",
                     transition: "all 0.15s ease",
-                    textAlign: "center",
                   }}
-                  onMouseEnter={(e) => { e.currentTarget.style.transform = "translateY(-2px)"; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.transform = "translateY(0)"; }}
                 >
-                  <span style={{ fontSize: "20px" }}>{isOccupied ? "🟠" : "🟢"}</span>
-                  <span style={{ color: "var(--text-primary)", fontWeight: 700, fontSize: "17px" }}>{slot.name}</span>
-                  <span style={{ fontSize: "11px", color: isOccupied ? "var(--danger)" : "var(--success)", fontWeight: 600 }}>
-                    {isOccupied ? "Active" : "Available"}
-                  </span>
-                  {isOccupied && activeOrder && (
-                    <span style={{ fontSize: "10px", color: "var(--text-muted)" }}>
-                      {activeOrder.items.length} item{activeOrder.items.length !== 1 ? "s" : ""}
+                  <button
+                    onClick={() => handleSelectSlot(slot)}
+                    style={{
+                      width: "100%",
+                      background: "none",
+                      border: "none",
+                      padding: "18px 12px 12px",
+                      display: "flex",
+                      flexDirection: "column",
+                      alignItems: "center",
+                      gap: "6px",
+                      cursor: "pointer",
+                      textAlign: "center",
+                    }}
+                  >
+                    <span style={{ fontSize: "20px" }}>{isOccupied ? "🟠" : "🟢"}</span>
+                    <span style={{ color: "var(--text-primary)", fontWeight: 700, fontSize: "17px" }}>{slot.name}</span>
+                    <span style={{ fontSize: "11px", color: isOccupied ? "var(--danger)" : "var(--success)", fontWeight: 600 }}>
+                      {isOccupied ? "Active" : "Available"}
                     </span>
-                  )}
+                    {isOccupied && activeOrder && (
+                      <span style={{ fontSize: "10px", color: "var(--text-muted)" }}>
+                        {activeOrder.items.length} item{activeOrder.items.length !== 1 ? "s" : ""}
+                      </span>
+                    )}
+                    {isOccupied && (
+                      <span style={{ fontSize: "10px", color: "var(--accent-gold)", fontWeight: 600, marginTop: "2px" }}>
+                        Tap to reopen →
+                      </span>
+                    )}
+                  </button>
                   {isOccupied && (
-                    <span style={{ fontSize: "10px", color: "var(--accent-gold)", fontWeight: 600, marginTop: "2px" }}>
-                      Tap to reopen →
-                    </span>
+                    <button
+                      onClick={(e) => handleResetSlot(slot, e)}
+                      style={{
+                        width: "100%",
+                        background: "rgba(239,68,68,0.15)",
+                        border: "none",
+                        borderTop: "1px solid rgba(239,68,68,0.3)",
+                        color: "var(--danger)",
+                        fontSize: "11px",
+                        fontWeight: 600,
+                        padding: "6px",
+                        cursor: "pointer",
+                        letterSpacing: "0.3px",
+                      }}
+                    >
+                      ✕ Reset Slot
+                    </button>
                   )}
-                </button>
+                </div>
               );
             })}
           </div>
